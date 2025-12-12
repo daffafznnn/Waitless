@@ -1,0 +1,33 @@
+export default defineNuxtRouteMiddleware(async (to, from) => {
+  // Skip on server-side during SSR
+  if (import.meta.server) {
+    return
+  }
+
+  const { isAuthenticated, user, initializeAuth } = useAuth()
+
+  // Initialize auth state if not already done
+  if (!user.value && !isAuthenticated.value) {
+    try {
+      await initializeAuth()
+    } catch (error) {
+      console.warn('Auth initialization failed in guest middleware:', error)
+    }
+  }
+
+  // Check again after initialization
+  if (isAuthenticated.value && user.value) {
+    const userRole = user.value.role
+    
+    // Redirect based on user role to their appropriate dashboard
+    switch (userRole) {
+      case 'ADMIN':
+        return navigateTo('/admin/dashboard')
+      case 'OWNER':
+        return navigateTo('/owner/dashboard')
+      default:
+        // For VISITOR or other roles, redirect to homepage
+        return navigateTo('/')
+    }
+  }
+})

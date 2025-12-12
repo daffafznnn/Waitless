@@ -9,12 +9,12 @@ import { authRoutes } from './routes/auth.routes';
 import { queueRoutes } from './routes/queue.routes';
 import { adminRoutes } from './routes/admin.routes';
 import { locationRoutes } from './routes/location.routes';
-import { logRequests } from './middleware/auth';
+import { logRequests } from './utils/auth-middleware';
 
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 3002;
 
 app.use(cors({
   origin: process.env.CLIENT_URL || 'http://localhost:3000',

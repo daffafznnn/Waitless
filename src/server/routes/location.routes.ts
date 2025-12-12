@@ -1,7 +1,7 @@
 /* FILE: src/server/routes/location.routes.ts */
 import { Router } from 'express';
 import { asyncHandler } from '../utils/response';
-import { requireAuth, requireOwner, optionalAuth } from '../middleware/auth';
+import { requireAuth, requireOwner, optionalAuth } from '../utils/auth-middleware';
 import * as locationController from '../controllers/location.controller';
 
 const router = Router();

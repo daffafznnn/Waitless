@@ -21,7 +21,7 @@
     "noUnusedParameters": true,
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
-    "ignoreDeprecations": "6.0",
+    "ignoreDeprecations": "5.0",
     "baseUrl": "./src",
     "paths": {
       "@/*": ["*"],
@@ -29,13 +29,20 @@
     }
   },
   "include": [
-    "src/**/*"
+    "src/server/**/*"
   ],
   "exclude": [
     "node_modules",
     "dist",
     "tests",
     "src/server/tests/**/*",
+    "src/composables/**/*",
+    "src/stores/**/*",
+    "src/pages/**/*",
+    "src/layouts/**/*",
+    "src/components/**/*",
+    "src/types/**/*",
+    "src/utils/**/*",
     "**/*.test.ts",
     "**/*.spec.ts"
   ],

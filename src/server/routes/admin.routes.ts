@@ -1,7 +1,7 @@
 /* FILE: src/server/routes/admin.routes.ts */
 import { Router } from 'express';
 import { asyncHandler } from '../utils/response';
-import { requireAuth, requireAdmin } from '../middleware/auth';
+import { requireAuth, requireAdmin } from '../utils/auth-middleware';
 import * as adminController from '../controllers/admin.controller';
 
 const router = Router();

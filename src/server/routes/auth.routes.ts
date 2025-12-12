@@ -1,7 +1,7 @@
 /* FILE: src/server/routes/auth.routes.ts */
 import { Router } from 'express';
 import { asyncHandler } from '../utils/response';
-import { requireAuth } from '../middleware/auth';
+import { requireAuth } from '../utils/auth-middleware';
 import * as authController from '../controllers/auth.controller';
 
 const router = Router();

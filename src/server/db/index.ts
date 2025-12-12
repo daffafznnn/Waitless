@@ -1,10 +1,11 @@
 /* FILE: src/server/db/index.ts */
 import { Sequelize, DataTypes, Transaction } from 'sequelize';
 import dotenv from 'dotenv';
+import { initUserModel } from '../models/user.model';
 
 dotenv.config();
 
-const config = require('./config.js');
+import config from './config.js';
 const env = process.env.NODE_ENV || 'development';
 const dbConfig = config[env];
 
@@ -63,6 +64,14 @@ export const testConnection = async (): Promise<void> => {
  */
 export const connectDatabase = async (): Promise<void> => {
   await testConnection();
+  
+  // Initialize models
+  initUserModel(sequelize);
+  
+  // Sync models (only in development)
+  if (process.env.NODE_ENV === 'development') {
+    await sequelize.sync({ alter: false });
+  }
 };
 
 /**

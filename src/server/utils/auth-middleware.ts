@@ -251,3 +251,6 @@ export const logRequests = (req: Request, res: Response, next: NextFunction): vo
   
   next();
 };
+
+// Tidak export default untuk menghindari auto-loading oleh Nuxt
+// export default authenticateToken;

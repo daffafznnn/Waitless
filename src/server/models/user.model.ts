@@ -22,16 +22,16 @@ export interface UserAttributes {
 export interface UserCreationAttributes extends Optional<UserAttributes, 'id' | 'created_at' | 'updated_at'> {}
 
 export class User extends Model<UserAttributes, UserCreationAttributes> implements UserAttributes {
-  public id!: number;
-  public email!: string;
-  public password_hash?: string;
-  public name!: string;
-  public phone?: string;
-  public role!: Role;
+  declare id: number;
+  declare email: string;
+  declare password_hash?: string;
+  declare name: string;
+  declare phone?: string;
+  declare role: Role;
   
-  public readonly created_at!: Date;
-  public readonly updated_at!: Date;
-  public readonly deleted_at?: Date;
+  declare readonly created_at: Date;
+  declare readonly updated_at: Date;
+  declare readonly deleted_at?: Date;
 
   static associate(models: any): void {
     User.hasMany(models.ServiceLocation, {

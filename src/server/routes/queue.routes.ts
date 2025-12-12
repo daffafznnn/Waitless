@@ -1,7 +1,7 @@
 /* FILE: src/server/routes/queue.routes.ts */
 import { Router } from 'express';
 import { asyncHandler } from '../utils/response';
-import { requireAuth, optionalAuth } from '../middleware/auth';
+import { requireAuth, optionalAuth } from '../utils/auth-middleware';
 import * as queueController from '../controllers/queue.controller';
 
 const router = Router();
