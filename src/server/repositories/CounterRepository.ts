@@ -1,5 +1,6 @@
 /* FILE: src/server/repositories/CounterRepository.ts */
-import { Transaction } from 'sequelize';
+import { Transaction, Op } from 'sequelize';
+import { sequelize } from '../db';
 import { Counter, CounterAttributes, CounterCreationAttributes } from '../models/counter.model';
 import { ServiceLocation } from '../models/service_location.model';
 
@@ -135,7 +136,6 @@ export class CounterRepository {
     }
 
     // Count tickets issued today for this counter
-    const { sequelize } = require('../db');
     const [results] = await sequelize.query(`
       SELECT COUNT(*) as issued_count 
       FROM tickets 
@@ -196,7 +196,6 @@ export class CounterRepository {
     excludeId?: number,
     transaction?: Transaction
   ): Promise<boolean> {
-    const { Op } = require('sequelize');
     const whereClause: any = {
       location_id: locationId,
       name,
@@ -223,7 +222,6 @@ export class CounterRepository {
     excludeId?: number,
     transaction?: Transaction
   ): Promise<boolean> {
-    const { Op } = require('sequelize');
     const whereClause: any = {
       location_id: locationId,
       prefix: prefix.toUpperCase(),

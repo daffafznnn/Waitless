@@ -8,9 +8,9 @@
     "dev": "concurrently --names \"BACKEND,FRONTEND\" --prefix-colors \"blue,green\" \"npm run dev:backend\" \"npm run dev:frontend\"",
     "dev:frontend": "nuxt dev",
     "dev:backend": "tsx watch src/server/index.ts",
-    "build": "tsc && nuxt build",
+    "build": "tsc --project tsconfig.server.json && nuxt build",
     "build:frontend": "nuxt build",
-    "build:backend": "tsc",
+    "build:backend": "tsc --project tsconfig.server.json",
     "start": "node dist/server/index.js",
     "start:frontend": "nuxt preview",
     "migrate": "sequelize-cli db:migrate",
@@ -29,7 +29,13 @@
     "test:watch": "vitest --watch",
     "lint": "eslint src --ext .ts",
     "lint:fix": "eslint src --ext .ts --fix",
-    "job:summary": "tsx src/server/jobs/daily-summary.job.ts"
+    "job:summary": "tsx src/server/jobs/daily-summary.job.ts",
+    "typecheck": "./scripts/check-ts.sh",
+    "typecheck:frontend": "nuxt typecheck",
+    "typecheck:backend": "tsc --project tsconfig.server.json --noEmit",
+    "typecheck:vue": "vue-tsc --noEmit",
+    "check:all": "npm run typecheck && npm run lint",
+    "fix:all": "npm run lint:fix && npm run typecheck"
   },
   "keywords": [
     "queue",

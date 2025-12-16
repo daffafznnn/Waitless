@@ -1,5 +1,6 @@
 /* FILE: src/server/repositories/SummaryRepository.ts */
-import { Transaction } from 'sequelize';
+import { Transaction, Op, fn, col, literal } from 'sequelize';
+import { sequelize } from '../db';
 import { DailySummary, DailySummaryCreationAttributes } from '../models/daily_summary.model';
 import { ServiceLocation } from '../models/service_location.model';
 
@@ -44,7 +45,6 @@ export class SummaryRepository {
     endDate: string,
     transaction?: Transaction
   ): Promise<DailySummary[]> {
-    const { Op } = require('sequelize');
     
     return DailySummary.findAll({
       where: {
@@ -84,7 +84,6 @@ export class SummaryRepository {
     date: string,
     transaction?: Transaction
   ): Promise<DailySummary> {
-    const { sequelize } = require('../db');
     
     // Calculate summary statistics from tickets
     const [summary] = await sequelize.query(`
@@ -138,7 +137,6 @@ export class SummaryRepository {
     completionRate: number;
     daysCount: number;
   }> {
-    const { fn, col, Op } = require('sequelize');
     
     const stats = await DailySummary.findOne({
       attributes: [
@@ -182,7 +180,6 @@ export class SummaryRepository {
     limit: number = 10,
     transaction?: Transaction
   ): Promise<Array<DailySummary & { completionRate: number }>> {
-    const { literal } = require('sequelize');
     
     const summaries = await DailySummary.findAll({
       where: { date_for: date },

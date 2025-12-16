@@ -7,14 +7,26 @@ export enum Role {
   VISITOR = 'VISITOR'
 }
 
+export interface LoadingState {
+  loading: boolean
+  error: string | null
+  lastFetch: Date | null
+}
+
 export interface User {
   id: number
   email: string
   name: string
+  phone?: string
   role: Role
   is_active: boolean
   created_at: string
   updated_at: string
+}
+
+export interface UserWithToken {
+  user: User
+  token: string
 }
 
 export interface LoginRequest {
@@ -28,6 +40,27 @@ export interface RegisterRequest {
   email: string
   password: string
   name: string
+  phone?: string
+  role?: Role
+}
+
+export interface UpdateProfileRequest {
+  name?: string
+  phone?: string
+}
+
+export interface ChangePasswordRequest {
+  currentPassword: string
+  newPassword: string
+}
+
+export interface RefreshTokenRequest {
+  refreshToken: string
+}
+
+export interface RefreshTokenResponse {
+  token: string
+  refreshToken: string
 }
 
 export interface AuthResponse {
@@ -139,6 +172,100 @@ export interface Counter {
   }
 }
 
+export interface CounterWithStatus extends Counter {
+  capacityStatus: {
+    capacity: number
+    issued: number
+    available: number
+    isAtCapacity: boolean
+  }
+  queueStatus: {
+    waiting: number
+    serving: number
+    done: number
+  }
+}
+
+export interface CounterQueueStatus {
+  counter: {
+    id: number
+    name: string
+    prefix: string
+  }
+  date: string
+  statistics: {
+    total: number
+    waiting: number
+    calling: number
+    serving: number
+    hold: number
+    done: number
+    cancelled: number
+  }
+  currentTicket?: {
+    id: number
+    queue_number: string
+    status: string
+  }
+  recentActivity: Array<{
+    id: number
+    queue_number: string
+    status: string
+    finished_at?: string
+  }>
+}
+
+export interface ActivityLog {
+  id: number
+  ticket_id: number
+  actor_id: number
+  event_type: string
+  note?: string
+  created_at: string
+  ticket: {
+    queue_number: string
+  }
+  actor: {
+    name: string
+  }
+}
+
+export interface DashboardStats {
+  overview: {
+    totalCounters: number
+    activeCounters: number
+    totalCapacity: number
+    todayIssued: number
+    utilizationRate: number
+  }
+  realTime: {
+    currentlyWaiting: number
+    currentlyServing: number
+    averageWaitTime: number
+    peakHour: string
+  }
+  trends: {
+    vsYesterday: {
+      issued: string
+      completed: string
+      avgWaitTime: string
+    }
+    vsLastWeek: {
+      issued: string
+      completed: string
+      avgWaitTime: string
+    }
+  }
+  counters: Array<{
+    id: number
+    name: string
+    status: string
+    currentQueue: number
+    todayServed: number
+    efficiency: number
+  }>
+}
+
 export interface LocationMember {
   id: number
   location_id: number
@@ -210,10 +337,42 @@ export interface QueueStatusResponse {
 }
 
 export interface IssueTicketRequest {
+  locationId: number
   counterId: number
-  visitorName?: string
-  visitorPhone?: string
-  priorityLevel?: number
+  userId?: number
+  dateFor?: string
+}
+
+export interface CallNextRequest {
+  counterId: number
+}
+
+export interface StartServingRequest {
+  ticketId: number
+}
+
+export interface HoldTicketRequest {
+  ticketId: number
+  reason: string
+}
+
+export interface ResumeTicketRequest {
+  ticketId: number
+}
+
+export interface MarkDoneRequest {
+  ticketId: number
+}
+
+export interface CancelTicketRequest {
+  ticketId: number
+  reason: string
+}
+
+export interface EstimateResponse {
+  estimatedMinutes: number
+  position: number
+  message: string
 }
 
 export interface IssueTicketResponse {
@@ -227,9 +386,72 @@ export interface CreateLocationRequest {
   name: string
   description?: string
   address?: string
+  phone?: string
+}
+
+export interface LocationWithOwner {
+  id: number
+  name: string
+  address?: string
   city?: string
   lat?: number
   lng?: number
+  phone?: string
+  description?: string
+  is_active: boolean
+  created_at: string
+  updated_at?: string
+  owner: {
+    id: number
+    name: string
+    email: string
+  }
+}
+
+export interface LocationStatus {
+  location: {
+    id: number
+    name: string
+  }
+  date: string
+  counters: Array<{
+    id: number
+    name: string
+    prefix: string
+    capacityStatus: {
+      capacity: number
+      issued: number
+      available: number
+      isAtCapacity: boolean
+    }
+  }>
+  summary: {
+    totalCapacity: number
+    totalIssued: number
+    totalAvailable: number
+    utilizationRate: number
+  }
+}
+
+export interface AddMemberRequest {
+  userId: number
+}
+
+export interface SystemStatus {
+  server: string
+  database: string
+  jobs: {
+    dailySummary: boolean
+    weeklyCleanup: boolean
+  }
+  lastDailySummaryRun: string
+}
+
+export interface HealthCheck {
+  ok: boolean
+  message: string
+  timestamp: string
+  version: string
 }
 
 export interface UpdateLocationRequest extends Partial<CreateLocationRequest> {

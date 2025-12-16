@@ -1,5 +1,6 @@
 /* FILE: src/server/repositories/DailySummaryRepository.ts */
-import { Transaction } from 'sequelize';
+import { Transaction, Op } from 'sequelize';
+import { sequelize } from '../db';
 import { DailySummary, DailySummaryAttributes, DailySummaryCreationAttributes } from '../models/daily_summary.model';
 import { Counter } from '../models/counter.model';
 
@@ -52,8 +53,6 @@ export class DailySummaryRepository {
     endDate: Date,
     transaction?: Transaction
   ): Promise<DailySummary[]> {
-    const { Op } = require('sequelize');
-    
     return DailySummary.findAll({
       include: [
         {
@@ -77,8 +76,6 @@ export class DailySummaryRepository {
    * Delete summaries older than specified date
    */
   async deleteOlderThan(cutoffDate: Date, transaction?: Transaction): Promise<number> {
-    const { Op } = require('sequelize');
-    
     return DailySummary.destroy({
       where: {
         date_for: { [Op.lt]: cutoffDate },
@@ -101,8 +98,6 @@ export class DailySummaryRepository {
     avgWaitTime: number;
     avgServiceTime: number;
   }> {
-    const { sequelize } = require('../db');
-
     const [results] = await sequelize.query(`
       SELECT 
         SUM(total_tickets_issued) as total_issued,

@@ -100,8 +100,16 @@
                 </label>
                 <div class="relative">
                   <select v-model="form.location" class="block w-full px-10 py-3 border border-gray-300 rounded-xl bg-white text-black focus:ring-2 focus:ring-blue-500 focus:border-blue-500 appearance-none">
-                    <option value="inParfume Bandung">inParfume Bandung</option>
-                    <option value="inParfume Jakarta">inParfume Jakarta</option>
+                    <option v-if="locationStore.loading" value="">Memuat lokasi...</option>
+                    <option v-else-if="availableLocations.length === 0" value="">Tidak ada lokasi tersedia</option>
+                    <option 
+                      v-else 
+                      v-for="location in availableLocations" 
+                      :key="location.id" 
+                      :value="location.name"
+                    >
+                      {{ location.name }}{{ location.city ? ` - ${location.city}` : '' }}
+                    </option>
                   </select>
                   <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                     <svg class="w-4 h-4 text-gray-400" fill="currentColor" viewBox="0 0 24 24">
@@ -247,8 +255,18 @@ const props = withDefaults(defineProps<Props>(), {
   demoPassword: 'demo123'
 })
 
-const { login } = useAuth()
 const router = useRouter()
+
+// Use stores for dynamic behavior
+const authStore = useAuthStore()
+const locationStore = useLocationStore()
+
+// Load locations on component mount
+onMounted(async () => {
+  if (props.showLocationSelect) {
+    await locationStore.fetchLocations()
+  }
+})
 
 // Reactive form data
 const form = reactive({
@@ -258,9 +276,9 @@ const form = reactive({
   rememberMe: false
 })
 
-const isLoading = ref(false)
-const error = ref('')
 const showPassword = ref(false)
+const isLoading = computed(() => authStore.loading)
+const error = computed(() => authStore.error)
 
 // Computed properties for different content based on type
 const pageTitle = computed(() => {
@@ -299,10 +317,6 @@ const formTitle = computed(() => {
   return props.type === 'admin' ? 'Login Admin' : 'Login Owner'
 })
 
-const panelText = computed(() => {
-  return props.type === 'admin' ? 'Panel: inParfume Bandung' : 'Panel: Business Dashboard'
-})
-
 const formSubtitle = computed(() => {
   return props.type === 'admin' 
     ? 'Masuk untuk mengelola antrean & loket' 
@@ -317,45 +331,40 @@ const emailPlaceholder = computed(() => {
   return props.type === 'admin' ? 'admin@waitless.app' : 'owner@waitless.app'
 })
 
-// Handle login
+// Computed for available locations
+const availableLocations = computed(() => {
+  return locationStore.locations.filter(location => location.is_active)
+})
+
+// Update panel text to be dynamic based on selected location
+const panelText = computed(() => {
+  if (props.type === 'admin' && form.location) {
+    return `Panel: ${form.location}`
+  }
+  return props.type === 'admin' ? 'Panel: WaitLess Admin' : 'Panel: Business Dashboard'
+})
+
+// Handle login with store integration
 const handleLogin = async () => {
   if (!form.email || !form.password) return
 
-  isLoading.value = true
-  error.value = ''
-
   try {
-    const response = await login({
+    // Use auth store for login
+    const result = await authStore.login({
       email: form.email,
       password: form.password,
-      role: props.type,
+      role: props.type.toUpperCase(),
       rememberMe: form.rememberMe
     })
 
-    if (!response.ok) {
-      error.value = response.error || 'Login failed'
-      return
+    if (result) {
+      // Redirect based on user role
+      const redirectPath = props.type === 'admin' ? '/admin/dashboard' : '/owner/dashboard'
+      await router.push(redirectPath)
     }
-
-    // Check if user has correct role
-    const userRole = response.data?.user?.role
-    if (props.type === 'admin' && !['ADMIN', 'OWNER'].includes(userRole)) {
-      error.value = 'Access denied. Admin privileges required.'
-      return
-    }
-    
-    if (props.type === 'owner' && userRole !== 'OWNER') {
-      error.value = 'Access denied. Business owner privileges required.'
-      return
-    }
-
-    // Redirect to appropriate dashboard
-    const redirectPath = props.type === 'admin' ? '/admin/dashboard' : '/owner/dashboard'
-    await router.push(redirectPath)
   } catch (err: any) {
-    error.value = err.message || 'Login failed. Please check your credentials.'
-  } finally {
-    isLoading.value = false
+    // Error is handled by the store and shown via computed error
+    console.error('Login failed:', err)
   }
 }
 </script>

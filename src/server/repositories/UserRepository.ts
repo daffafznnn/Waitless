@@ -1,5 +1,5 @@
 /* FILE: src/server/repositories/UserRepository.ts */
-import { Transaction } from 'sequelize';
+import { Transaction, Op } from 'sequelize';
 import { User, UserAttributes, UserCreationAttributes } from '../models/user.model';
 
 export class UserRepository {
@@ -112,7 +112,6 @@ export class UserRepository {
     limit: number = 20,
     transaction?: Transaction
   ): Promise<{ rows: User[]; count: number }> {
-    const { Op } = require('sequelize');
     
     return User.findAndCountAll({
       where: {

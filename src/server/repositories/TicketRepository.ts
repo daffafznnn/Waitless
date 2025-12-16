@@ -1,9 +1,10 @@
 /* FILE: src/server/repositories/TicketRepository.ts */
-import { Transaction } from 'sequelize';
+import { Transaction, Op, fn } from 'sequelize';
 import { Ticket, TicketAttributes, TicketCreationAttributes, TicketStatus } from '../models/ticket.model';
 import { Counter } from '../models/counter.model';
 import { User } from '../models/user.model';
 import { ServiceLocation } from '../models/service_location.model';
+import { sequelize } from '../db';
 
 export class TicketRepository {
   /**
@@ -11,7 +12,7 @@ export class TicketRepository {
    */
   async createTicket(ticketData: TicketCreationAttributes, transaction: Transaction): Promise<Ticket> {
     // Get the next sequence number for this counter and date with row lock
-    const { sequelize } = require('../db');
+    // Using imported sequelize
     
     const [result] = await sequelize.query(`
       SELECT COALESCE(MAX(sequence), 0) + 1 as next_sequence 
@@ -215,7 +216,7 @@ export class TicketRepository {
     current?: Ticket;
     nextWaiting?: Ticket;
   }> {
-    const { Op } = require('sequelize');
+    // Using imported Op
 
     // Get counts by status
     const statusCounts = await Ticket.findAll({
@@ -225,7 +226,7 @@ export class TicketRepository {
       },
       attributes: [
         'status',
-        [require('sequelize').fn('COUNT', '*'), 'count'],
+        [fn('COUNT', '*'), 'count'],
       ],
       group: ['status'],
       raw: true,
@@ -342,7 +343,7 @@ export class TicketRepository {
       where: {
         counter_id: ticket.counter_id,
         date_for: ticket.date_for,
-        sequence: { [require('sequelize').Op.lt]: ticket.sequence },
+        sequence: { [Op.lt]: ticket.sequence },
         status: TicketStatus.WAITING,
       },
       transaction,
@@ -360,7 +361,7 @@ export class TicketRepository {
     date: string,
     transaction?: Transaction
   ): Promise<{ estimatedMinutes: number; position: number }> {
-    const { Op } = require('sequelize');
+    // Using imported Op
 
     // Count tickets ahead in queue
     const position = await Ticket.count({
@@ -394,7 +395,7 @@ export class TicketRepository {
     endDate: Date,
     transaction?: Transaction
   ): Promise<Ticket[]> {
-    const { Op } = require('sequelize');
+    // Using imported Op
     
     return Ticket.findAll({
       where: {

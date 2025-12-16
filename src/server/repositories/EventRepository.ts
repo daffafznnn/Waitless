@@ -1,5 +1,5 @@
 /* FILE: src/server/repositories/EventRepository.ts */
-import { Transaction } from 'sequelize';
+import { Transaction, Op, fn } from 'sequelize';
 import { TicketEvent, TicketEventCreationAttributes, EventType } from '../models/ticket_event.model';
 import { User } from '../models/user.model';
 import { Ticket } from '../models/ticket.model';
@@ -116,7 +116,6 @@ export class EventRepository {
     limit: number = 100,
     transaction?: Transaction
   ): Promise<{ rows: TicketEvent[]; count: number }> {
-    const { Op } = require('sequelize');
     
     return TicketEvent.findAndCountAll({
       where: {
@@ -153,7 +152,6 @@ export class EventRepository {
     limit: number = 100,
     transaction?: Transaction
   ): Promise<{ rows: TicketEvent[]; count: number }> {
-    const { Op } = require('sequelize');
     const startDate = `${date} 00:00:00`;
     const endDate = `${date} 23:59:59`;
     
@@ -194,7 +192,6 @@ export class EventRepository {
     limit: number = 100,
     transaction?: Transaction
   ): Promise<{ rows: TicketEvent[]; count: number }> {
-    const { Op } = require('sequelize');
     const startDate = `${date} 00:00:00`;
     const endDate = `${date} 23:59:59`;
     
@@ -236,7 +233,6 @@ export class EventRepository {
     date: string,
     transaction?: Transaction
   ): Promise<Record<EventType, number>> {
-    const { Op, fn } = require('sequelize');
     const startDate = `${date} 00:00:00`;
     const endDate = `${date} 23:59:59`;
     
@@ -317,7 +313,6 @@ export class EventRepository {
     date: string,
     transaction?: Transaction
   ): Promise<number> {
-    const { Op } = require('sequelize');
     const startDate = `${date} 00:00:00`;
     const endDate = `${date} 23:59:59`;
     

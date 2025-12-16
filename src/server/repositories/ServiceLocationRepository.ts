@@ -1,5 +1,6 @@
 /* FILE: src/server/repositories/ServiceLocationRepository.ts */
-import { Transaction } from 'sequelize';
+import { Transaction, Op } from 'sequelize';
+import { sequelize } from '../db';
 import { ServiceLocation, ServiceLocationAttributes, ServiceLocationCreationAttributes } from '../models/service_location.model';
 import { User } from '../models/user.model';
 
@@ -115,8 +116,6 @@ export class ServiceLocationRepository {
    * Search locations by name
    */
   async searchByName(searchTerm: string, transaction?: Transaction): Promise<ServiceLocation[]> {
-    const { Op } = require('sequelize');
-    
     return ServiceLocation.findAll({
       where: { 
         name: { [Op.like]: `%${searchTerm}%` },
@@ -143,7 +142,6 @@ export class ServiceLocationRepository {
     excludeId?: number,
     transaction?: Transaction
   ): Promise<boolean> {
-    const { Op } = require('sequelize');
     const whereClause: any = {
       name,
       owner_id: ownerId,
@@ -172,8 +170,6 @@ export class ServiceLocationRepository {
     activeCounters: number;
     totalMembers: number;
   }> {
-    const { sequelize } = require('../db');
-
     const [results] = await sequelize.query(`
       SELECT 
         (SELECT COUNT(*) FROM counters WHERE location_id = ?) as total_counters,

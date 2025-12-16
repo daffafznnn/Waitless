@@ -1,5 +1,5 @@
 /* FILE: src/server/repositories/LocationRepository.ts */
-import { Transaction } from 'sequelize';
+import { Transaction, Op, literal } from 'sequelize';
 import { ServiceLocation, ServiceLocationAttributes, ServiceLocationCreationAttributes } from '../models/service_location.model';
 import { User } from '../models/user.model';
 import { Counter } from '../models/counter.model';
@@ -143,8 +143,6 @@ export class LocationRepository {
     limit: number = 20,
     transaction?: Transaction
   ): Promise<{ rows: ServiceLocation[]; count: number }> {
-    const { Op } = require('sequelize');
-    
     return ServiceLocation.findAndCountAll({
       where: {
         [Op.and]: [
@@ -181,8 +179,6 @@ export class LocationRepository {
     radiusKm: number = 10,
     transaction?: Transaction
   ): Promise<ServiceLocation[]> {
-    const { Op, literal } = require('sequelize');
-    
     return ServiceLocation.findAll({
       where: {
         is_active: true,

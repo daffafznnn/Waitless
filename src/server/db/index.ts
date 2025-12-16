@@ -5,7 +5,7 @@ import { initUserModel } from '../models/user.model';
 
 dotenv.config();
 
-import config from './config.js';
+import config from './config';
 const env = process.env.NODE_ENV || 'development';
 const dbConfig = config[env];
 

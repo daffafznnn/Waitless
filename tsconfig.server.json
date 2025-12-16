@@ -1,0 +1,61 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "CommonJS",
+    "lib": ["ES2022"],
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "removeComments": false,
+    "noImplicitAny": true,
+    "noImplicitThis": true,
+    "noImplicitReturns": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "ignoreDeprecations": "5.0",
+    "baseUrl": "./src",
+    "paths": {
+      "@/*": ["*"],
+      "@/server/*": ["server/*"]
+    }
+  },
+  "include": [
+    "src/server/index.ts",
+    "src/server/config/**/*",
+    "src/server/db/**/*",
+    "src/server/models/**/*",
+    "src/server/routes/**/*",
+    "src/server/middleware/**/*",
+    "src/server/utils/**/*",
+    "src/server/jobs/**/*",
+    "src/server/services/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "tests",
+    "src/server/tests/**/*",
+    "src/server/api/**/*",
+    "src/composables/**/*",
+    "src/stores/**/*",
+    "src/pages/**/*",
+    "src/layouts/**/*",
+    "src/components/**/*",
+    "src/types/**/*",
+    "src/utils/**/*",
+    "**/*.test.ts",
+    "**/*.spec.ts"
+  ],
+  "ts-node": {
+    "esm": false
+  }
+}

@@ -1,5 +1,6 @@
 /* FILE: src/server/repositories/LocationMemberRepository.ts */
 import { Transaction } from 'sequelize';
+import { sequelize } from '../db';
 import { LocationMember, LocationMemberAttributes, LocationMemberCreationAttributes } from '../models/location_member.model';
 import { User } from '../models/user.model';
 import { ServiceLocation } from '../models/service_location.model';
@@ -178,8 +179,6 @@ export class LocationMemberRepository {
     activeMembers: number;
     adminMembers: number;
   }> {
-    const { sequelize } = require('../db');
-
     const [results] = await sequelize.query(`
       SELECT 
         COUNT(*) as total_members,
