@@ -182,8 +182,8 @@ export class LocationRepository {
     return ServiceLocation.findAll({
       where: {
         is_active: true,
-        lat: { [Op.ne]: null },
-        lng: { [Op.ne]: null },
+        lat: { [Op.ne]: null as any },
+        lng: { [Op.ne]: null as any },
       },
       attributes: {
         include: [

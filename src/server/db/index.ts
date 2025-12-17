@@ -1,13 +1,12 @@
 /* FILE: src/server/db/index.ts */
 import { Sequelize, DataTypes, Transaction } from 'sequelize';
 import dotenv from 'dotenv';
-import { initUserModel } from '../models/user.model';
 
 dotenv.config();
 
 import config from './config';
 const env = process.env.NODE_ENV || 'development';
-const dbConfig = config[env];
+const dbConfig = config[env as keyof typeof config];
 
 export const sequelize = new Sequelize(
   dbConfig.database,
@@ -65,8 +64,8 @@ export const testConnection = async (): Promise<void> => {
 export const connectDatabase = async (): Promise<void> => {
   await testConnection();
   
-  // Initialize models
-  initUserModel(sequelize);
+  // Import models after sequelize is initialized
+  await import('../models');
   
   // Sync models (only in development)
   if (process.env.NODE_ENV === 'development') {

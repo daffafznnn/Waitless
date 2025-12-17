@@ -1,5 +1,5 @@
 /* FILE: src/server/repositories/DailySummaryRepository.ts */
-import { Transaction, Op } from 'sequelize';
+import { Transaction, Op, QueryTypes } from 'sequelize';
 import { sequelize } from '../db';
 import { DailySummary, DailySummaryAttributes, DailySummaryCreationAttributes } from '../models/daily_summary.model';
 import { Counter } from '../models/counter.model';
@@ -98,7 +98,7 @@ export class DailySummaryRepository {
     avgWaitTime: number;
     avgServiceTime: number;
   }> {
-    const [results] = await sequelize.query(`
+    const results = await sequelize.query(`
       SELECT 
         SUM(total_tickets_issued) as total_issued,
         SUM(total_tickets_served) as total_served,
@@ -110,15 +110,21 @@ export class DailySummaryRepository {
         AND ds.date BETWEEN ? AND ?
     `, {
       replacements: [locationId, startDate, endDate],
-      type: sequelize.QueryTypes.SELECT,
+      type: QueryTypes.SELECT,
       transaction,
-    });
+    }) as Array<{
+      total_issued: string;
+      total_served: string;
+      avg_wait_time: string;
+      avg_service_time: string;
+    }>;
 
+    const result = results[0];
     return {
-      totalTicketsIssued: parseInt(results?.total_issued || '0'),
-      totalTicketsServed: parseInt(results?.total_served || '0'),
-      avgWaitTime: parseFloat(results?.avg_wait_time || '0'),
-      avgServiceTime: parseFloat(results?.avg_service_time || '0'),
+      totalTicketsIssued: parseInt(result?.total_issued || '0'),
+      totalTicketsServed: parseInt(result?.total_served || '0'),
+      avgWaitTime: parseFloat(result?.avg_wait_time || '0'),
+      avgServiceTime: parseFloat(result?.avg_service_time || '0'),
     };
   }
 }

@@ -100,7 +100,7 @@
                 </label>
                 <div class="relative">
                   <select v-model="form.location" class="block w-full px-10 py-3 border border-gray-300 rounded-xl bg-white text-black focus:ring-2 focus:ring-blue-500 focus:border-blue-500 appearance-none">
-                    <option v-if="locationStore.loading" value="">Memuat lokasi...</option>
+                    <option v-if="locationStore.isLoading" value="">Memuat lokasi...</option>
                     <option v-else-if="availableLocations.length === 0" value="">Tidak ada lokasi tersedia</option>
                     <option 
                       v-else 
@@ -186,17 +186,17 @@
                 </div>
 
                 <!-- Error Message -->
-                <div v-if="error" class="bg-red-50 border border-red-200 rounded-lg p-3">
-                  <p class="text-sm text-red-700">{{ error }}</p>
+                <div v-if="authStore.getError('login')" class="bg-red-50 border border-red-200 rounded-lg p-3">
+                  <p class="text-sm text-red-700">{{ authStore.getError('login') }}</p>
                 </div>
 
                 <!-- Submit Button -->
                 <button 
                   type="submit" 
-                  :disabled="isLoading"
+                  :disabled="authStore.isLoading"
                   class="w-full bg-blue-600 text-white py-3 px-4 rounded-full font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
-                  {{ isLoading ? 'Memuat...' : 'Masuk ke Dashboard' }}
+                  {{ authStore.isLoading ? 'Memuat...' : 'Masuk ke Dashboard' }}
                 </button>
               </form>
 
@@ -257,14 +257,19 @@ const props = withDefaults(defineProps<Props>(), {
 
 const router = useRouter()
 
-// Use stores for dynamic behavior
-const authStore = useAuthStore()
+// Use stores for dynamic behavior  
 const locationStore = useLocationStore()
+const authStore = useAuthStore()
+const { login } = useAuth()
 
 // Load locations on component mount
 onMounted(async () => {
   if (props.showLocationSelect) {
-    await locationStore.fetchLocations()
+    try {
+      await locationStore.fetchAllLocations()
+    } catch (err) {
+      console.warn('Failed to load locations:', err)
+    }
   }
 })
 
@@ -272,13 +277,11 @@ onMounted(async () => {
 const form = reactive({
   email: '',
   password: '',
-  location: 'inParfume Bandung',
+  location: '',
   rememberMe: false
 })
 
 const showPassword = ref(false)
-const isLoading = computed(() => authStore.loading)
-const error = computed(() => authStore.error)
 
 // Computed properties for different content based on type
 const pageTitle = computed(() => {
@@ -333,7 +336,7 @@ const emailPlaceholder = computed(() => {
 
 // Computed for available locations
 const availableLocations = computed(() => {
-  return locationStore.locations.filter(location => location.is_active)
+  return locationStore.getActiveLocations
 })
 
 // Update panel text to be dynamic based on selected location
@@ -344,27 +347,48 @@ const panelText = computed(() => {
   return props.type === 'admin' ? 'Panel: WaitLess Admin' : 'Panel: Business Dashboard'
 })
 
-// Handle login with store integration
+// Handle login with auth composable
 const handleLogin = async () => {
   if (!form.email || !form.password) return
 
   try {
-    // Use auth store for login
-    const result = await authStore.login({
+    const result = await login({
       email: form.email,
-      password: form.password,
-      role: props.type.toUpperCase(),
-      rememberMe: form.rememberMe
+      password: form.password
     })
-
-    if (result) {
+    
+    console.log('Login successful, result:', result)
+    
+    // Wait a moment for the store to update
+    await nextTick()
+    
+    // Check if login was successful by checking the store
+    if (authStore.isAuthenticated && authStore.user) {
+      // Clear any previous errors
+      authStore.clearError('login')
+      
       // Redirect based on user role
-      const redirectPath = props.type === 'admin' ? '/admin/dashboard' : '/owner/dashboard'
-      await router.push(redirectPath)
+      const userRole = authStore.user.role
+      let redirectPath = '/dashboard'
+      
+      if (userRole === 'OWNER') {
+        redirectPath = '/owner/dashboard'
+      } else if (userRole === 'ADMIN') {
+        redirectPath = '/admin/dashboard'
+      } else {
+        // Fallback based on props type
+        redirectPath = props.type === 'admin' ? '/admin/dashboard' : '/owner/dashboard'
+      }
+      
+      console.log('Redirecting to:', redirectPath)
+      await navigateTo(redirectPath)
+    } else {
+      console.error('Login appeared successful but user not authenticated')
     }
+    
   } catch (err: any) {
-    // Error is handled by the store and shown via computed error
     console.error('Login failed:', err)
+    // Error is handled by the useAuth composable and stored in authStore
   }
 }
 </script>

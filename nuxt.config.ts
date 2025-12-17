@@ -25,7 +25,7 @@ export default defineNuxtConfig({
     
     // Public keys (exposed to client-side)
     public: {
-      apiBaseUrl: process.env.API_BASE_URL || 'http://localhost:3002/api',
+      apiBaseUrl: process.env.NODE_ENV === 'development' ? '/api' : process.env.API_BASE_URL || 'http://localhost:3002/api',
       appName: 'Waitless',
       version: '1.0.0'
     }
@@ -79,11 +79,78 @@ export default defineNuxtConfig({
     payloadExtraction: false
   },
 
+  // Suppress development warnings
+  ignore: [
+    '**/#app-manifest'
+  ],
+
+  // Build configuration
+  build: {
+    analyze: false
+  },
+
+  // PostCSS Configuration
+  postcss: {
+    plugins: {
+      tailwindcss: {},
+      autoprefixer: {},
+    },
+  },
+
   // Vite configuration
   vite: {
     build: {
       rollupOptions: {
         external: ['src/server/**/*']
+      }
+    },
+    // Suppress harmless import errors in development
+    optimizeDeps: {
+      exclude: ['#app-manifest']
+    },
+    // Complete suppress of import analysis for virtual modules
+    server: {
+      fs: {
+        allow: ['..']
+      }
+    },
+    plugins: [
+      {
+        name: 'suppress-warnings',
+        configResolved() {
+          const originalWarn = console.warn
+          console.warn = (...args) => {
+            const message = args.join(' ')
+            if (message.includes('#app-manifest') || 
+                message.includes('postcss.config.js') ||
+                message.includes('Pre-transform error')) {
+              return
+            }
+            originalWarn(...args)
+          }
+        }
+      }
+    ]
+  },
+
+  // Suppress warnings and logs
+  logLevel: 'info',
+  
+  // Additional configuration to suppress warnings
+  hooks: {
+    'vite:extendConfig': (config, { isClient, isServer }) => {
+      if (config.define) {
+        config.define['import.meta.env.NUXT_DEV'] = JSON.stringify(true)
+      }
+      
+      // Suppress import analysis warnings
+      if (isClient) {
+        config.onwarn = (warning, warn) => {
+          if (warning.code === 'UNRESOLVED_IMPORT') return
+          if (warning.message.includes('#app-manifest')) return
+          if (warning.message.includes('postcss.config.js')) return
+          warn(warning)
+        }
       }
     }
   }

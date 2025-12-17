@@ -1,5 +1,5 @@
 /* FILE: src/server/repositories/SummaryRepository.ts */
-import { Transaction, Op, fn, col, literal } from 'sequelize';
+import { Transaction, Op, fn, col, literal, QueryTypes } from 'sequelize';
 import { sequelize } from '../db';
 import { DailySummary, DailySummaryCreationAttributes } from '../models/daily_summary.model';
 import { ServiceLocation } from '../models/service_location.model';
@@ -86,7 +86,7 @@ export class SummaryRepository {
   ): Promise<DailySummary> {
     
     // Calculate summary statistics from tickets
-    const [summary] = await sequelize.query(`
+    const results = await sequelize.query(`
       SELECT 
         COUNT(CASE WHEN status IN ('WAITING', 'CALLING', 'SERVING', 'HOLD', 'DONE', 'CANCELLED') THEN 1 END) as total_issued,
         COUNT(CASE WHEN status = 'DONE' THEN 1 END) as total_done,
@@ -102,10 +102,17 @@ export class SummaryRepository {
       WHERE location_id = ? AND date_for = ?
     `, {
       replacements: [locationId, date],
-      type: sequelize.QueryTypes.SELECT,
+      type: QueryTypes.SELECT,
       transaction,
-    });
+    }) as Array<{
+      total_issued: string;
+      total_done: string;
+      total_hold: string;
+      total_cancel: string;
+      avg_service_seconds: string;
+    }>;
 
+    const summary = results[0];
     const summaryData: DailySummaryCreationAttributes = {
       location_id: locationId,
       date_for: date,

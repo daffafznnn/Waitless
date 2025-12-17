@@ -18,18 +18,18 @@ export interface CounterAttributes {
 export interface CounterCreationAttributes extends Optional<CounterAttributes, 'id' | 'created_at' | 'updated_at'> {}
 
 export class Counter extends Model<CounterAttributes, CounterCreationAttributes> implements CounterAttributes {
-  public id!: number;
-  public location_id!: number;
-  public name!: string;
-  public description?: string;
-  public prefix!: string;
-  public open_time!: string;
-  public close_time!: string;
-  public capacity_per_day!: number;
-  public is_active!: boolean;
+  declare id: number;
+  declare location_id: number;
+  declare name: string;
+  declare description?: string;
+  declare prefix: string;
+  declare open_time: string;
+  declare close_time: string;
+  declare capacity_per_day: number;
+  declare is_active: boolean;
 
-  public readonly created_at!: Date;
-  public readonly updated_at!: Date;
+  declare readonly created_at: Date;
+  declare readonly updated_at: Date;
 
   static associate(models: any): void {
     Counter.belongsTo(models.ServiceLocation, {

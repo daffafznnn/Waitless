@@ -1,5 +1,5 @@
 /* FILE: src/server/repositories/CounterRepository.ts */
-import { Transaction, Op } from 'sequelize';
+import { Transaction, Op, QueryTypes } from 'sequelize';
 import { sequelize } from '../db';
 import { Counter, CounterAttributes, CounterCreationAttributes } from '../models/counter.model';
 import { ServiceLocation } from '../models/service_location.model';
@@ -136,17 +136,17 @@ export class CounterRepository {
     }
 
     // Count tickets issued today for this counter
-    const [results] = await sequelize.query(`
+    const results = await sequelize.query(`
       SELECT COUNT(*) as issued_count 
       FROM tickets 
       WHERE counter_id = ? AND date_for = ?
     `, {
       replacements: [counterId, date],
-      type: sequelize.QueryTypes.SELECT,
+      type: QueryTypes.SELECT,
       transaction,
-    });
+    }) as Array<{ issued_count: string }>;
 
-    const issuedCount = parseInt(results?.issued_count || '0');
+    const issuedCount = parseInt(results[0]?.issued_count || '0');
     const available = Math.max(0, counter.capacity_per_day - issuedCount);
     
     return {

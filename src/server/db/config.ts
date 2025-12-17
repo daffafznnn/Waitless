@@ -54,7 +54,7 @@ const config: Config = {
       acquire: parseInt(process.env.DB_POOL_ACQUIRE || '60000'),
       idle: parseInt(process.env.DB_POOL_IDLE || '10000'),
     },
-    logging: console.log,
+    logging: false,
     timezone: '+00:00',
   },
   test: {

@@ -148,6 +148,19 @@ export interface ServiceLocation {
   members?: LocationMember[]
 }
 
+// Alias for easier import
+export interface Location extends ServiceLocation {}
+
+export interface Service {
+  id: number
+  name: string
+  description?: string
+  duration_minutes?: number
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
 export interface Counter {
   id: number
   location_id: number
@@ -157,6 +170,7 @@ export interface Counter {
   open_time: string
   close_time: string
   capacity_per_day: number
+  status: 'ACTIVE' | 'INACTIVE'
   is_active: boolean
   created_at: string
   updated_at: string
@@ -466,6 +480,8 @@ export interface CreateCounterRequest {
   openTime: string
   closeTime: string
   capacityPerDay: number
+  serviceIds?: number[]
+  closedMessage?: string
 }
 
 export interface UpdateCounterRequest extends Partial<Omit<CreateCounterRequest, 'locationId'>> {

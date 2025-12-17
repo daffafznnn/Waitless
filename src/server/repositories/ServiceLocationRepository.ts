@@ -1,5 +1,5 @@
 /* FILE: src/server/repositories/ServiceLocationRepository.ts */
-import { Transaction, Op } from 'sequelize';
+import { Transaction, Op, QueryTypes } from 'sequelize';
 import { sequelize } from '../db';
 import { ServiceLocation, ServiceLocationAttributes, ServiceLocationCreationAttributes } from '../models/service_location.model';
 import { User } from '../models/user.model';
@@ -170,21 +170,26 @@ export class ServiceLocationRepository {
     activeCounters: number;
     totalMembers: number;
   }> {
-    const [results] = await sequelize.query(`
+    const results = await sequelize.query(`
       SELECT 
         (SELECT COUNT(*) FROM counters WHERE location_id = ?) as total_counters,
         (SELECT COUNT(*) FROM counters WHERE location_id = ? AND is_active = 1) as active_counters,
         (SELECT COUNT(*) FROM location_members WHERE location_id = ? AND is_active = 1) as total_members
     `, {
       replacements: [locationId, locationId, locationId],
-      type: sequelize.QueryTypes.SELECT,
+      type: QueryTypes.SELECT,
       transaction,
-    });
+    }) as Array<{
+      total_counters: string;
+      active_counters: string;
+      total_members: string;
+    }>;
 
+    const result = results[0];
     return {
-      totalCounters: parseInt(results?.total_counters || '0'),
-      activeCounters: parseInt(results?.active_counters || '0'),
-      totalMembers: parseInt(results?.total_members || '0'),
+      totalCounters: parseInt(result?.total_counters || '0'),
+      activeCounters: parseInt(result?.active_counters || '0'),
+      totalMembers: parseInt(result?.total_members || '0'),
     };
   }
 

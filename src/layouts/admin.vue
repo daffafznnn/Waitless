@@ -49,7 +49,7 @@ const mobileSidebarOpen = ref(false)
 const pageTitle = computed(() => {
   const titles: Record<string, string> = {
     '/admin/dashboard': 'Dashboard',
-    '/admin/queues': 'Queue Management',
+    '/admin/queue': 'Queue Management',
     '/admin/locations': 'Location Management',
     '/admin/users': 'User Management',
     '/admin/reports': 'Reports & Analytics',

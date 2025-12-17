@@ -18,6 +18,8 @@ interface AdminState {
   activities: Record<number, ActivityLog[]>
   dailySummaries: Record<number, DailySummary>
   dashboardStats: Record<number, DashboardStats>
+  generalDashboardStats: DashboardStats | null
+  activeQueues: any[]
   loading: LoadingState
   errors: Record<string, string | null>
 }
@@ -30,6 +32,8 @@ export const useAdminStore = defineStore('admin', {
     activities: {},
     dailySummaries: {},
     dashboardStats: {},
+    generalDashboardStats: null,
+    activeQueues: [],
     loading: {
       loading: false,
       error: null,
@@ -61,6 +65,14 @@ export const useAdminStore = defineStore('admin', {
 
     getDashboardStatsByLocation: (state) => (locationId: number) => {
       return state.dashboardStats[locationId] || null
+    },
+
+    getGeneralDashboardStats: (state) => {
+      return state.generalDashboardStats
+    },
+
+    getActiveQueues: (state) => {
+      return state.activeQueues
     },
 
     isLoading: (state) => state.loading.loading,
@@ -330,6 +342,79 @@ export const useAdminStore = defineStore('admin', {
       }
     },
 
+    async fetchGeneralDashboardStats(date?: string) {
+      try {
+        this.setLoading(true)
+        this.clearError('generalDashboardStats')
+
+        const adminApi = useAdminApi()
+        const response = await adminApi.getGeneralDashboardStats(date)
+
+        if (response.ok && response.data) {
+          this.generalDashboardStats = response.data
+          return response.data
+        } else {
+          throw new Error(response.error || 'Failed to fetch general dashboard stats')
+        }
+      } catch (error: any) {
+        this.setError('generalDashboardStats', error.message)
+        throw error
+      } finally {
+        this.setLoading(false)
+      }
+    },
+
+    async fetchActiveQueues() {
+      try {
+        this.setLoading(true)
+        this.clearError('activeQueues')
+
+        const adminApi = useAdminApi()
+        const response = await adminApi.getActiveQueues()
+
+        if (response.ok && response.data) {
+          // Also fetch locations to ensure location names are available
+          const locationStore = useLocationStore()
+          await locationStore.fetchAllLocations()
+          
+          this.activeQueues = response.data
+          return response.data
+        } else {
+          throw new Error(response.error || 'Failed to fetch active queues')
+        }
+      } catch (error: any) {
+        this.setError('activeQueues', error.message)
+        throw error
+      } finally {
+        this.setLoading(false)
+      }
+    },
+
+    async fetchAllAccessibleCounters() {
+      try {
+        this.setLoading(true)
+        this.clearError('allAccessibleCounters')
+
+        const adminApi = useAdminApi()
+        const response = await adminApi.getAllAccessibleCounters()
+
+        if (response.ok && response.data) {
+          // Also fetch locations to ensure location names are available
+          const locationStore = useLocationStore()
+          await locationStore.fetchAllLocations()
+          
+          return response.data.counters
+        } else {
+          throw new Error(response.error || 'Failed to fetch accessible counters')
+        }
+      } catch (error: any) {
+        this.setError('allAccessibleCounters', error.message)
+        throw error
+      } finally {
+        this.setLoading(false)
+      }
+    },
+
     clearLocationData(locationId: number) {
       delete this.counters[locationId]
       delete this.countersWithStatus[locationId]
@@ -349,6 +434,8 @@ export const useAdminStore = defineStore('admin', {
       this.activities = {}
       this.dailySummaries = {}
       this.dashboardStats = {}
+      this.generalDashboardStats = null
+      this.activeQueues = []
       this.loading = { loading: false, error: null, lastFetch: null }
       this.errors = {}
     }

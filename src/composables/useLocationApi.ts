@@ -21,27 +21,27 @@ export const useLocationApi = () => {
       page: options?.page || 1,
       limit: options?.limit || 20
     }
-    return await get('/api/locations', { params })
+    return await get('/locations', { params })
   }
 
   const getLocationById = async (id: number): Promise<ApiResponse<{ location: LocationWithOwner }>> => {
-    return await get(`/api/locations/${id}`)
+    return await get(`/locations/${id}`)
   }
 
   const createLocation = async (data: CreateLocationRequest): Promise<ApiResponse<{ location: LocationWithOwner }>> => {
-    return await post('/api/locations', data)
+    return await post('/locations', data)
   }
 
   const updateLocation = async (id: number, data: UpdateLocationRequest): Promise<ApiResponse<{ location: LocationWithOwner }>> => {
-    return await put(`/api/locations/${id}`, data)
+    return await put(`/locations/${id}`, data)
   }
 
   const deleteLocation = async (id: number): Promise<ApiResponse<{ message: string }>> => {
-    return await del(`/api/locations/${id}`)
+    return await del(`/locations/${id}`)
   }
 
   const getLocationCounters = async (id: number): Promise<ApiResponse<{ counters: Counter[] }>> => {
-    return await get(`/api/locations/${id}/counters`)
+    return await get(`/locations/${id}/counters`)
   }
 
   const getLocationStatus = async (
@@ -49,25 +49,25 @@ export const useLocationApi = () => {
     date?: string
   ): Promise<ApiResponse<{ status: LocationStatus }>> => {
     const params = date ? { date } : {}
-    return await get(`/api/locations/${id}/status`, { params })
+    return await get(`/locations/${id}/status`, { params })
   }
 
   const addLocationMember = async (
     id: number,
     data: AddMemberRequest
   ): Promise<ApiResponse<{ member: LocationMember }>> => {
-    return await post(`/api/locations/${id}/members`, data)
+    return await post(`/locations/${id}/members`, data)
   }
 
   const removeLocationMember = async (
     id: number,
     userId: number
   ): Promise<ApiResponse<{ message: string }>> => {
-    return await del(`/api/locations/${id}/members/${userId}`)
+    return await del(`/locations/${id}/members/${userId}`)
   }
 
   const getLocationMembers = async (id: number): Promise<ApiResponse<{ members: LocationMember[] }>> => {
-    return await get(`/api/locations/${id}/members`)
+    return await get(`/locations/${id}/members`)
   }
 
   return {

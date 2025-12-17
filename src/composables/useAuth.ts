@@ -1,69 +1,69 @@
 /* FILE: src/composables/useAuth.ts */
-import type { LoginRequest, RegisterRequest, User, AuthResponse } from '~/types'
+import type { LoginRequest, RegisterRequest, UpdateProfileRequest, ChangePasswordRequest } from '~/types'
 
 export const useAuth = () => {
-  const { get, post } = useApi()
   const authStore = useAuthStore()
+  const authApi = useAuthApi()
 
   // Login
-  const login = async (credentials: LoginRequest): Promise<AuthResponse> => {
+  const login = async (credentials: LoginRequest) => {
     try {
-      const response = await post<{ user: User }>('/auth/login', credentials)
+      authStore.setLoading(true)
+      authStore.clearError('login')
+      
+      const response = await authApi.login(credentials)
       
       if (response.ok && response.data) {
-        // Update store
         authStore.setUser(response.data.user)
         authStore.setAuthenticated(true)
-        
-        return {
-          ok: true,
-          data: response.data
-        }
+        return response.data
+      } else {
+        authStore.setError('login', response.error || 'Login failed')
+        throw new Error(response.error || 'Login failed')
       }
-      
-      return response as AuthResponse
     } catch (error: any) {
-      return {
-        ok: false,
-        error: error.message || 'Login failed'
-      }
+      authStore.setError('login', error.message || 'Login failed')
+      throw error
+    } finally {
+      authStore.setLoading(false)
     }
   }
 
   // Register
-  const register = async (data: RegisterRequest): Promise<AuthResponse> => {
+  const register = async (data: RegisterRequest) => {
     try {
-      const response = await post<{ user: User }>('/auth/register', data)
+      authStore.setLoading(true)
+      authStore.clearError('register')
+      
+      const response = await authApi.register(data)
       
       if (response.ok && response.data) {
-        // Update store
         authStore.setUser(response.data.user)
         authStore.setAuthenticated(true)
-        
-        return {
-          ok: true,
-          data: response.data
-        }
+        return response.data
+      } else {
+        authStore.setError('register', response.error || 'Registration failed')
+        throw new Error(response.error || 'Registration failed')
       }
-      
-      return response as AuthResponse
     } catch (error: any) {
-      return {
-        ok: false,
-        error: error.message || 'Registration failed'
-      }
+      authStore.setError('register', error.message || 'Registration failed')
+      throw error
+    } finally {
+      authStore.setLoading(false)
     }
   }
 
   // Logout
-  const logout = async (): Promise<void> => {
+  const logout = async () => {
     try {
-      await post('/auth/logout')
+      authStore.setLoading(true)
+      await authApi.logout()
     } catch (error) {
       console.warn('Logout request failed:', error)
     } finally {
       // Clear store regardless of API response
       authStore.clearAuth()
+      authStore.setLoading(false)
       
       // Redirect to appropriate login page if on client
       if (import.meta.client) {
@@ -81,14 +81,15 @@ export const useAuth = () => {
   }
 
   // Get current user profile
-  const me = async (): Promise<User | null> => {
+  const me = async () => {
     try {
-      const response = await get<User>('/auth/me')
+      authStore.setLoading(true)
+      const response = await authApi.getProfile()
       
       if (response.ok && response.data) {
-        authStore.setUser(response.data)
+        authStore.setUser(response.data.user)
         authStore.setAuthenticated(true)
-        return response.data
+        return response.data.user
       }
       
       // Clear auth if request failed
@@ -97,47 +98,53 @@ export const useAuth = () => {
     } catch (error) {
       authStore.clearAuth()
       return null
+    } finally {
+      authStore.setLoading(false)
     }
   }
 
   // Update profile
-  const updateProfile = async (data: Partial<User>): Promise<AuthResponse> => {
+  const updateProfile = async (data: UpdateProfileRequest) => {
     try {
-      const response = await post<User>('/auth/profile', data)
+      authStore.setLoading(true)
+      authStore.clearError('updateProfile')
+      
+      const response = await authApi.updateProfile(data)
       
       if (response.ok && response.data) {
-        authStore.setUser(response.data)
-        
-        return {
-          ok: true,
-          data: { user: response.data }
-        }
+        authStore.setUser(response.data.user)
+        return response.data.user
+      } else {
+        authStore.setError('updateProfile', response.error || 'Profile update failed')
+        throw new Error(response.error || 'Profile update failed')
       }
-      
-      return response as AuthResponse
     } catch (error: any) {
-      return {
-        ok: false,
-        error: error.message || 'Profile update failed'
-      }
+      authStore.setError('updateProfile', error.message || 'Profile update failed')
+      throw error
+    } finally {
+      authStore.setLoading(false)
     }
   }
 
   // Change password
-  const changePassword = async (data: {
-    currentPassword: string
-    newPassword: string
-    confirmPassword: string
-  }): Promise<AuthResponse> => {
+  const changePassword = async (data: ChangePasswordRequest) => {
     try {
-      const response = await post('/auth/change-password', data)
+      authStore.setLoading(true)
+      authStore.clearError('changePassword')
       
-      return response as AuthResponse
-    } catch (error: any) {
-      return {
-        ok: false,
-        error: error.message || 'Password change failed'
+      const response = await authApi.changePassword(data)
+      
+      if (response.ok) {
+        return response.data
+      } else {
+        authStore.setError('changePassword', response.error || 'Password change failed')
+        throw new Error(response.error || 'Password change failed')
       }
+    } catch (error: any) {
+      authStore.setError('changePassword', error.message || 'Password change failed')
+      throw error
+    } finally {
+      authStore.setLoading(false)
     }
   }
 

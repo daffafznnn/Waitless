@@ -14,13 +14,12 @@ export interface LocationMemberAttributes {
 export interface LocationMemberCreationAttributes extends Optional<LocationMemberAttributes, 'id' | 'created_at'> {}
 
 export class LocationMember extends Model<LocationMemberAttributes, LocationMemberCreationAttributes> implements LocationMemberAttributes {
-  public id!: number;
-  public location_id!: number;
-  public user_id!: number;
-  public role!: Role;
-  public is_active!: boolean;
-
-  public readonly created_at!: Date;
+  declare id: number;
+  declare location_id: number;
+  declare user_id: number;
+  declare role: Role;
+  declare is_active: boolean;
+  declare readonly created_at: Date;
 
   static associate(models: any): void {
     LocationMember.belongsTo(models.ServiceLocation, {

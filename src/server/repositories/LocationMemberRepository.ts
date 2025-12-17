@@ -1,5 +1,5 @@
 /* FILE: src/server/repositories/LocationMemberRepository.ts */
-import { Transaction } from 'sequelize';
+import { Transaction, QueryTypes } from 'sequelize';
 import { sequelize } from '../db';
 import { LocationMember, LocationMemberAttributes, LocationMemberCreationAttributes } from '../models/location_member.model';
 import { User } from '../models/user.model';
@@ -179,7 +179,7 @@ export class LocationMemberRepository {
     activeMembers: number;
     adminMembers: number;
   }> {
-    const [results] = await sequelize.query(`
+    const results = await sequelize.query(`
       SELECT 
         COUNT(*) as total_members,
         SUM(CASE WHEN is_active = 1 THEN 1 ELSE 0 END) as active_members,
@@ -188,14 +188,19 @@ export class LocationMemberRepository {
       WHERE location_id = ?
     `, {
       replacements: [locationId],
-      type: sequelize.QueryTypes.SELECT,
+      type: QueryTypes.SELECT,
       transaction,
-    });
+    }) as Array<{
+      total_members: string;
+      active_members: string;
+      admin_members: string;
+    }>;
 
+    const result = results[0];
     return {
-      totalMembers: parseInt(results?.total_members || '0'),
-      activeMembers: parseInt(results?.active_members || '0'),
-      adminMembers: parseInt(results?.admin_members || '0'),
+      totalMembers: parseInt(result?.total_members || '0'),
+      activeMembers: parseInt(result?.active_members || '0'),
+      adminMembers: parseInt(result?.admin_members || '0'),
     };
   }
 

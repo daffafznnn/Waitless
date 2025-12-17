@@ -41,7 +41,7 @@ export const sendSuccess = <T>(
 /**
  * Send error response
  */
-export const sendError = (
+export const sendErrorResponse = (
   res: Response,
   error: string,
   statusCode: number = 400,
@@ -59,6 +59,9 @@ export const sendError = (
   res.status(statusCode).json(response);
 };
 
+// Note: Renamed from sendError to avoid conflict with h3's sendError
+// Use sendErrorResponse instead of sendError to prevent import conflicts
+
 /**
  * Send validation error response (for Zod errors)
  */
@@ -72,7 +75,7 @@ export const sendValidationError = (
     code: err.code,
   }));
 
-  sendError(res, 'Validation failed', 400, details);
+  sendErrorResponse(res, 'Validation failed', 400, details);
 };
 
 /**
@@ -82,7 +85,7 @@ export const sendNotFound = (
   res: Response,
   resource: string = 'Resource'
 ): void => {
-  sendError(res, `${resource} not found`, 404);
+  sendErrorResponse(res, `${resource} not found`, 404);
 };
 
 /**
@@ -92,7 +95,7 @@ export const sendUnauthorized = (
   res: Response,
   message: string = 'Authentication required'
 ): void => {
-  sendError(res, message, 401);
+  sendErrorResponse(res, message, 401);
 };
 
 /**
@@ -102,7 +105,7 @@ export const sendForbidden = (
   res: Response,
   message: string = 'Insufficient permissions'
 ): void => {
-  sendError(res, message, 403);
+  sendErrorResponse(res, message, 403);
 };
 
 /**
@@ -112,7 +115,7 @@ export const sendServerError = (
   res: Response,
   message: string = 'Internal server error'
 ): void => {
-  sendError(res, message, 500);
+  sendErrorResponse(res, message, 500);
 };
 
 /**
@@ -145,7 +148,7 @@ export const asyncHandler = (
       if (error.message) {
         // Known error with message
         const statusCode = error.statusCode || 400;
-        sendError(res, error.message, statusCode, error.details);
+        sendErrorResponse(res, error.message, statusCode, error.details);
         return;
       }
       
@@ -230,27 +233,27 @@ export class ResponseHelper {
   }
 
   static badRequest(res: Response, message?: string, details?: any) {
-    return sendError(res, message || ErrorMessages.INVALID_REQUEST, StatusCodes.BAD_REQUEST, details);
+    return sendErrorResponse(res, message || ErrorMessages.INVALID_REQUEST, StatusCodes.BAD_REQUEST, details);
   }
 
   static unauthorized(res: Response, message?: string) {
-    return sendError(res, message || ErrorMessages.AUTHENTICATION_REQUIRED, StatusCodes.UNAUTHORIZED);
+    return sendErrorResponse(res, message || ErrorMessages.AUTHENTICATION_REQUIRED, StatusCodes.UNAUTHORIZED);
   }
 
   static forbidden(res: Response, message?: string) {
-    return sendError(res, message || ErrorMessages.INSUFFICIENT_PERMISSIONS, StatusCodes.FORBIDDEN);
+    return sendErrorResponse(res, message || ErrorMessages.INSUFFICIENT_PERMISSIONS, StatusCodes.FORBIDDEN);
   }
 
   static notFound(res: Response, message?: string) {
-    return sendError(res, message || ErrorMessages.RESOURCE_NOT_FOUND, StatusCodes.NOT_FOUND);
+    return sendErrorResponse(res, message || ErrorMessages.RESOURCE_NOT_FOUND, StatusCodes.NOT_FOUND);
   }
 
   static conflict(res: Response, message?: string) {
-    return sendError(res, message || ErrorMessages.DUPLICATE_ENTRY, StatusCodes.CONFLICT);
+    return sendErrorResponse(res, message || ErrorMessages.DUPLICATE_ENTRY, StatusCodes.CONFLICT);
   }
 
   static serverError(res: Response, message?: string) {
-    return sendError(res, message || ErrorMessages.INTERNAL_ERROR, StatusCodes.INTERNAL_SERVER_ERROR);
+    return sendErrorResponse(res, message || ErrorMessages.INTERNAL_ERROR, StatusCodes.INTERNAL_SERVER_ERROR);
   }
 
   static validationError(res: Response, zodError: ZodError) {

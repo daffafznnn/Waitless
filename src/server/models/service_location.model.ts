@@ -17,17 +17,16 @@ export interface ServiceLocationAttributes {
 export interface ServiceLocationCreationAttributes extends Optional<ServiceLocationAttributes, 'id' | 'created_at' | 'updated_at'> {}
 
 export class ServiceLocation extends Model<ServiceLocationAttributes, ServiceLocationCreationAttributes> implements ServiceLocationAttributes {
-  public id!: number;
-  public owner_id!: number;
-  public name!: string;
-  public address?: string;
-  public city?: string;
-  public lat?: number;
-  public lng?: number;
-  public is_active!: boolean;
-
-  public readonly created_at!: Date;
-  public readonly updated_at!: Date;
+  declare id: number;
+  declare owner_id: number;
+  declare name: string;
+  declare address?: string;
+  declare city?: string;
+  declare lat?: number;
+  declare lng?: number;
+  declare is_active: boolean;
+  declare readonly created_at: Date;
+  declare readonly updated_at: Date;
 
   static associate(models: any): void {
     ServiceLocation.belongsTo(models.User, {

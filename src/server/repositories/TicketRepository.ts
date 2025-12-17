@@ -1,5 +1,5 @@
 /* FILE: src/server/repositories/TicketRepository.ts */
-import { Transaction, Op, fn } from 'sequelize';
+import { Transaction, Op, fn, QueryTypes } from 'sequelize';
 import { Ticket, TicketAttributes, TicketCreationAttributes, TicketStatus } from '../models/ticket.model';
 import { Counter } from '../models/counter.model';
 import { User } from '../models/user.model';
@@ -14,18 +14,18 @@ export class TicketRepository {
     // Get the next sequence number for this counter and date with row lock
     // Using imported sequelize
     
-    const [result] = await sequelize.query(`
+    const results = await sequelize.query(`
       SELECT COALESCE(MAX(sequence), 0) + 1 as next_sequence 
       FROM tickets 
       WHERE counter_id = ? AND date_for = ?
       FOR UPDATE
     `, {
       replacements: [ticketData.counter_id, ticketData.date_for],
-      type: sequelize.QueryTypes.SELECT,
+      type: QueryTypes.SELECT,
       transaction,
-    });
+    }) as Array<{ next_sequence: number }>;
 
-    const nextSequence = result?.next_sequence || 1;
+    const nextSequence = results[0]?.next_sequence || 1;
 
     // Get counter prefix for queue number generation
     const counter = await Counter.findByPk(ticketData.counter_id, {

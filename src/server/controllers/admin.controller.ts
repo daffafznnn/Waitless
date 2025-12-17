@@ -52,7 +52,13 @@ export const createCounter = async (req: Request, res: Response): Promise<void> 
       data: { counter },
     });
   } catch (error: any) {
+    const adminUserId = (req as any).user?.userId;
+    
     if (error instanceof z.ZodError) {
+      console.warn('Counter creation validation failed', { 
+        adminUserId, 
+        validationErrors: error.errors.map(e => ({ path: e.path, message: e.message }))
+      });
       res.status(400).json({
         ok: false,
         error: 'Validation failed',
@@ -64,6 +70,7 @@ export const createCounter = async (req: Request, res: Response): Promise<void> 
       return;
     }
 
+    console.error('Counter creation failed', { error: error instanceof Error ? error.message : error, adminUserId });
     res.status(400).json({
       ok: false,
       error: error.message || 'Failed to create counter',
@@ -468,6 +475,103 @@ export const getDashboardStats = async (req: Request, res: Response): Promise<vo
     res.status(400).json({
       ok: false,
       error: error.message || 'Failed to get dashboard stats',
+    });
+  }
+};
+
+/**
+ * GET /api/admin/dashboard/stats
+ * Get general dashboard stats (aggregated from all accessible locations)
+ */
+export const getGeneralDashboardStats = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const adminUserId = (req as any).user?.userId;
+    const date = req.query.date as string | undefined;
+
+    if (!adminUserId) {
+      res.status(401).json({
+        ok: false,
+        error: 'Authentication required',
+      });
+      return;
+    }
+
+    // Get aggregated dashboard stats from all accessible locations
+    const stats = await adminService.getGeneralDashboardStats(adminUserId, date);
+
+    res.json({
+      ok: true,
+      data: stats,
+    });
+  } catch (error: any) {
+    console.error('Error getting general dashboard stats', { error: error instanceof Error ? error.message : error, adminUserId: (req as any).user?.userId });
+    res.status(400).json({
+      ok: false,
+      error: error.message || 'Failed to get dashboard stats',
+    });
+  }
+};
+
+/**
+ * GET /api/admin/dashboard/active-queues
+ * Get active queues across all accessible locations
+ */
+export const getActiveQueues = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const adminUserId = (req as any).user?.userId;
+
+    if (!adminUserId) {
+      res.status(401).json({
+        ok: false,
+        error: 'Authentication required',
+      });
+      return;
+    }
+
+    // Get active queues from all accessible locations
+    const activeQueues = await adminService.getActiveQueues(adminUserId);
+
+    res.json({
+      ok: true,
+      data: activeQueues,
+    });
+  } catch (error: any) {
+    console.error('Error getting active queues', { error: error instanceof Error ? error.message : error, adminUserId: (req as any).user?.userId });
+    res.status(400).json({
+      ok: false,
+      error: error.message || 'Failed to get active queues',
+    });
+  }
+};
+
+/**
+ * GET /api/admin/counters
+ * Get all counters accessible to admin (across all locations)
+ */
+export const getAllAccessibleCounters = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const adminUserId = (req as any).user?.userId;
+
+    if (!adminUserId) {
+      res.status(401).json({
+        ok: false,
+        error: 'Authentication required',
+      });
+      return;
+    }
+
+    // Get all counters from accessible locations
+    const counters = await adminService.getAllAccessibleCounters(adminUserId);
+
+    res.json({
+      ok: true,
+      data: { counters },
+    });
+  } catch (error: any) {
+    console.error('Error getting accessible counters', { error: error instanceof Error ? error.message : error, adminUserId: (req as any).user?.userId });
+    res.status(400).json({
+      ok: false,
+      error: error.message || 'Failed to get counters',
     });
   }
 };

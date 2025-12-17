@@ -22,7 +22,7 @@ export const useSystemApi = () => {
   }
 
   const getSystemStatus = async (): Promise<ApiResponse<SystemStatus>> => {
-    return await get('/api/status')
+    return await get('/status')
   }
 
   return {

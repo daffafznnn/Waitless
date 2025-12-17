@@ -15,19 +15,19 @@ export const useAdminApi = () => {
   const { get, post, put, delete: del } = useApi()
 
   const createCounter = async (data: CreateCounterRequest): Promise<ApiResponse<{ counter: Counter }>> => {
-    return await post('/api/admin/counters', data)
+    return await post('/admin/counters', data)
   }
 
   const updateCounter = async (counterId: number, data: UpdateCounterRequest): Promise<ApiResponse<{ counter: Counter }>> => {
-    return await put(`/api/admin/counters/${counterId}`, data)
+    return await put(`/admin/counters/${counterId}`, data)
   }
 
   const deleteCounter = async (counterId: number): Promise<ApiResponse<{ message: string }>> => {
-    return await del(`/api/admin/counters/${counterId}`)
+    return await del(`/admin/counters/${counterId}`)
   }
 
   const getLocationCounters = async (locationId: number): Promise<ApiResponse<{ counters: Counter[] }>> => {
-    return await get(`/api/admin/locations/${locationId}/counters`)
+    return await get(`/admin/locations/${locationId}/counters`)
   }
 
   const getCountersWithStatus = async (
@@ -35,7 +35,7 @@ export const useAdminApi = () => {
     date?: string
   ): Promise<ApiResponse<{ counters: CounterWithStatus[] }>> => {
     const params = date ? { date } : {}
-    return await get(`/api/admin/locations/${locationId}/counters/status`, { params })
+    return await get(`/admin/locations/${locationId}/counters/status`, { params })
   }
 
   const getCounterQueueStatus = async (
@@ -43,7 +43,7 @@ export const useAdminApi = () => {
     date?: string
   ): Promise<ApiResponse<{ status: CounterQueueStatus }>> => {
     const params = date ? { date } : {}
-    return await get(`/api/admin/counters/${counterId}/queue`, { params })
+    return await get(`/admin/counters/${counterId}/queue`, { params })
   }
 
   const getLocationActivity = async (
@@ -59,7 +59,7 @@ export const useAdminApi = () => {
       limit: options?.limit || 50,
       ...(options?.date && { date: options.date })
     }
-    return await get(`/api/admin/locations/${locationId}/activity`, { params })
+    return await get(`/admin/locations/${locationId}/activity`, { params })
   }
 
   const getCounterActivity = async (
@@ -75,7 +75,7 @@ export const useAdminApi = () => {
       limit: options?.limit || 50,
       ...(options?.date && { date: options.date })
     }
-    return await get(`/api/admin/counters/${counterId}/activity`, { params })
+    return await get(`/admin/counters/${counterId}/activity`, { params })
   }
 
   const getDailySummary = async (
@@ -83,7 +83,7 @@ export const useAdminApi = () => {
     date?: string
   ): Promise<ApiResponse<{ summary: DailySummary }>> => {
     const params = date ? { date } : {}
-    return await get(`/api/admin/locations/${locationId}/summary`, { params })
+    return await get(`/admin/locations/${locationId}/summary`, { params })
   }
 
   const getDashboardStats = async (
@@ -91,7 +91,22 @@ export const useAdminApi = () => {
     date?: string
   ): Promise<ApiResponse<{ stats: DashboardStats }>> => {
     const params = date ? { date } : {}
-    return await get(`/api/admin/locations/${locationId}/dashboard`, { params })
+    return await get(`/admin/locations/${locationId}/dashboard`, { params })
+  }
+
+  const getGeneralDashboardStats = async (
+    date?: string
+  ): Promise<ApiResponse<DashboardStats>> => {
+    const params = date ? { date } : {}
+    return await get('/admin/dashboard/stats', { params })
+  }
+
+  const getActiveQueues = async (): Promise<ApiResponse<any[]>> => {
+    return await get('/admin/dashboard/active-queues')
+  }
+
+  const getAllAccessibleCounters = async (): Promise<ApiResponse<{ counters: Counter[] }>> => {
+    return await get('/admin/counters')
   }
 
   return {
@@ -104,6 +119,9 @@ export const useAdminApi = () => {
     getLocationActivity,
     getCounterActivity,
     getDailySummary,
-    getDashboardStats
+    getDashboardStats,
+    getGeneralDashboardStats,
+    getActiveQueues,
+    getAllAccessibleCounters
   }
 }

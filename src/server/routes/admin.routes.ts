@@ -24,4 +24,11 @@ router.get('/counters/:counterId/activity', asyncHandler(adminController.getCoun
 router.get('/locations/:locationId/summary', asyncHandler(adminController.getDailySummary));
 router.get('/locations/:locationId/dashboard', asyncHandler(adminController.getDashboardStats));
 
+// General dashboard stats (aggregated from all accessible locations)
+router.get('/dashboard/stats', asyncHandler(adminController.getGeneralDashboardStats));
+router.get('/dashboard/active-queues', asyncHandler(adminController.getActiveQueues));
+
+// Get all counters accessible to admin (across all locations)
+router.get('/counters', asyncHandler(adminController.getAllAccessibleCounters));
+
 export { router as adminRoutes };

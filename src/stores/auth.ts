@@ -39,13 +39,17 @@ interface AuthState {
   user: User | null
   isAuthenticated: boolean
   initialized: boolean
+  loading: boolean
+  errors: Record<string, string | null>
 }
 
 export const useAuthStore = defineStore('auth', {
   state: (): AuthState => ({
     user: null,
     isAuthenticated: false,
-    initialized: false
+    initialized: false,
+    loading: false,
+    errors: {}
   }),
 
   getters: {
@@ -79,7 +83,16 @@ export const useAuthStore = defineStore('auth', {
     // Get user display name
     getDisplayName: (state) => {
       return state.user?.name || state.user?.email || 'User'
-    }
+    },
+
+    // Loading states
+    isLoading: (state) => state.loading,
+
+    // Get error by key
+    getError: (state) => (key: string) => state.errors[key],
+
+    // Check if has error
+    hasError: (state) => (key: string) => !!state.errors[key]
   },
 
   actions: {
@@ -124,11 +137,33 @@ export const useAuthStore = defineStore('auth', {
         })
       }
     },
+
+    // Set loading state
+    setLoading(loading: boolean) {
+      this.loading = loading
+    },
+
+    // Set error
+    setError(key: string, error: string | null) {
+      this.errors[key] = error
+    },
+
+    // Clear error
+    clearError(key: string) {
+      this.errors[key] = null
+    },
+
+    // Clear all errors
+    clearAllErrors() {
+      this.errors = {}
+    },
     
     // Clear authentication data
     clearAuth() {
       this.user = null
       this.isAuthenticated = false
+      this.loading = false
+      this.errors = {}
       clearStorage()
     },
     
@@ -137,6 +172,8 @@ export const useAuthStore = defineStore('auth', {
       this.user = null
       this.isAuthenticated = false
       this.initialized = false
+      this.loading = false
+      this.errors = {}
       clearStorage()
     },
 
@@ -154,13 +191,5 @@ export const useAuthStore = defineStore('auth', {
   },
 
   // Persist state in localStorage
-  persist: {
-    key: 'waitless_auth',
-    storage: import.meta.client ? localStorage : undefined,
-    paths: ['user', 'isAuthenticated', 'initialized'],
-    serializer: {
-      serialize: JSON.stringify,
-      deserialize: JSON.parse
-    }
-  }
+  persist: true
 })

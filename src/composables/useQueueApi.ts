@@ -18,36 +18,36 @@ export const useQueueApi = () => {
   const { get, post } = useApi()
 
   const issueTicket = async (data: IssueTicketRequest): Promise<ApiResponse<{ ticket: Ticket }>> => {
-    return await post('/api/queue/issue', data)
+    return await post('/queue/issue', data)
   }
 
   const callNext = async (data: CallNextRequest): Promise<ApiResponse<{ ticket?: Ticket; queueNumber?: string; message: string }>> => {
-    return await post('/api/queue/call-next', data)
+    return await post('/queue/call-next', data)
   }
 
   const startServing = async (data: StartServingRequest): Promise<ApiResponse<{ ticket: Ticket }>> => {
-    return await post('/api/queue/start-serving', data)
+    return await post('/queue/start-serving', data)
   }
 
   const holdTicket = async (data: HoldTicketRequest): Promise<ApiResponse<{ ticket: Ticket }>> => {
-    return await post('/api/queue/hold', data)
+    return await post('/queue/hold', data)
   }
 
   const resumeTicket = async (data: ResumeTicketRequest): Promise<ApiResponse<{ ticket: Ticket }>> => {
-    return await post('/api/queue/resume', data)
+    return await post('/queue/resume', data)
   }
 
   const markDone = async (data: MarkDoneRequest): Promise<ApiResponse<{ ticket: Ticket }>> => {
-    return await post('/api/queue/done', data)
+    return await post('/queue/done', data)
   }
 
   const cancelTicket = async (data: CancelTicketRequest): Promise<ApiResponse<{ ticket: Ticket }>> => {
-    return await post('/api/queue/cancel', data)
+    return await post('/queue/cancel', data)
   }
 
   const getQueueStatus = async (counterId: number, date?: string): Promise<ApiResponse<{ status: QueueStatusResponse }>> => {
     const params = date ? { date } : {}
-    return await get(`/api/queue/status/${counterId}`, { params })
+    return await get(`/queue/status/${counterId}`, { params })
   }
 
   const getTodayTickets = async (
@@ -63,20 +63,20 @@ export const useQueueApi = () => {
       limit: options?.limit || 50,
       ...(options?.date && { date: options.date })
     }
-    return await get(`/api/queue/today/${locationId}`, { params })
+    return await get(`/queue/today/${locationId}`, { params })
   }
 
   const getTicketByQueueNumber = async (queueNumber: string): Promise<ApiResponse<{ ticket: Ticket }>> => {
-    return await get(`/api/queue/ticket/${queueNumber}`)
+    return await get(`/queue/ticket/${queueNumber}`)
   }
 
   const getUserTickets = async (date?: string): Promise<ApiResponse<{ tickets: Ticket[] }>> => {
     const params = date ? { date } : {}
-    return await get('/api/queue/user/tickets', { params })
+    return await get('/queue/user/tickets', { params })
   }
 
   const getEstimatedWaitTime = async (ticketId: number): Promise<ApiResponse<{ estimate: EstimateResponse }>> => {
-    return await get(`/api/queue/estimate/${ticketId}`)
+    return await get(`/queue/estimate/${ticketId}`)
   }
 
   return {
