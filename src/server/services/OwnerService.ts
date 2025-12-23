@@ -2,9 +2,12 @@
 import { UserRepository } from '../repositories/UserRepository';
 import { LocationRepository } from '../repositories/LocationRepository';
 import { SummaryRepository } from '../repositories/SummaryRepository';
+import { LocationMemberRepository } from '../repositories/LocationMemberRepository';
 import { sequelize } from '../db';
 import { ServiceLocation } from '../models/service_location.model';
-import { Role } from '../models/user.model';
+import { Counter } from '../models/counter.model';
+import { User, Role } from '../models/user.model';
+import bcrypt from 'bcrypt';
 
 export interface CreateLocationRequest {
   name: string;
@@ -29,15 +32,51 @@ export interface AddLocationMemberRequest {
   role: Role;
 }
 
+export interface CreateCounterRequest {
+  name: string;
+  description?: string;
+  prefix: string;
+  openTime?: string;
+  closeTime?: string;
+  capacityPerDay?: number;
+}
+
+export interface UpdateCounterRequest {
+  name?: string;
+  description?: string;
+  prefix?: string;
+  openTime?: string;
+  closeTime?: string;
+  capacityPerDay?: number;
+  isActive?: boolean;
+}
+
+export interface InviteStaffRequest {
+  email: string;
+  name: string;
+  locationId: number;
+  role: string;
+  password?: string;
+}
+
+export interface UpdateStaffRequest {
+  name?: string;
+  role?: string;
+  locationId?: number;
+  is_active?: boolean;
+}
+
 export class OwnerService {
   private userRepository: UserRepository;
   private locationRepository: LocationRepository;
   private summaryRepository: SummaryRepository;
+  private memberRepository: LocationMemberRepository;
 
   constructor() {
     this.userRepository = new UserRepository();
     this.locationRepository = new LocationRepository();
     this.summaryRepository = new SummaryRepository();
+    this.memberRepository = new LocationMemberRepository();
   }
 
   /**
@@ -154,10 +193,6 @@ export class OwnerService {
       if (location.owner_id !== ownerId) {
         throw new Error('You can only delete your own locations');
       }
-
-      // Check if location has active counters or tickets
-      // For safety, we might want to soft delete or require confirmation
-      // This is a simplified implementation
 
       // Delete location
       await this.locationRepository.delete(locationId, transaction);
@@ -387,5 +422,419 @@ export class OwnerService {
     radiusKm: number = 10
   ): Promise<ServiceLocation[]> {
     return this.locationRepository.findNearby(lat, lng, radiusKm);
+  }
+
+  // ========== COUNTER MANAGEMENT ==========
+
+  /**
+   * Get all counters for a location (owner-only)
+   */
+  async getLocationCounters(ownerId: number, locationId: number): Promise<Counter[]> {
+    // Verify ownership
+    const location = await this.locationRepository.findByIdSimple(locationId);
+    
+    if (!location) {
+      throw new Error('Location not found');
+    }
+    
+    if (location.owner_id !== ownerId) {
+      throw new Error('Access denied');
+    }
+    
+    return this.locationRepository.getCountersByLocationId(locationId);
+  }
+
+  /**
+   * Create a new counter in a location (owner-only)
+   */
+  async createCounter(
+    ownerId: number,
+    locationId: number,
+    counterData: CreateCounterRequest
+  ): Promise<Counter> {
+    const transaction = await sequelize.transaction();
+    
+    try {
+      // Verify ownership
+      const location = await this.locationRepository.findByIdSimple(locationId, transaction);
+      
+      if (!location) {
+        throw new Error('Location not found');
+      }
+      
+      if (location.owner_id !== ownerId) {
+        throw new Error('Access denied');
+      }
+
+      // Create counter
+      const counter = await Counter.create({
+        location_id: locationId,
+        name: counterData.name,
+        description: counterData.description,
+        prefix: counterData.prefix,
+        open_time: counterData.openTime || '08:00:00',
+        close_time: counterData.closeTime || '17:00:00',
+        capacity_per_day: counterData.capacityPerDay || 100,
+        is_active: true,
+      }, { transaction });
+
+      await transaction.commit();
+      return counter;
+    } catch (error) {
+      await transaction.rollback();
+      throw error;
+    }
+  }
+
+  /**
+   * Update a counter (owner-only)
+   */
+  async updateCounter(
+    ownerId: number,
+    counterId: number,
+    updates: UpdateCounterRequest
+  ): Promise<Counter> {
+    const transaction = await sequelize.transaction();
+    
+    try {
+      const counter = await Counter.findByPk(counterId, { transaction });
+      
+      if (!counter) {
+        throw new Error('Counter not found');
+      }
+      
+      // Verify ownership via location
+      const location = await this.locationRepository.findByIdSimple(counter.location_id, transaction);
+      
+      if (!location || location.owner_id !== ownerId) {
+        throw new Error('Access denied');
+      }
+
+      // Build update data
+      const updateData: any = {};
+      if (updates.name) updateData.name = updates.name;
+      if (updates.description !== undefined) updateData.description = updates.description;
+      if (updates.prefix) updateData.prefix = updates.prefix;
+      if (updates.openTime) updateData.open_time = updates.openTime;
+      if (updates.closeTime) updateData.close_time = updates.closeTime;
+      if (updates.capacityPerDay !== undefined) updateData.capacity_per_day = updates.capacityPerDay;
+      if (updates.isActive !== undefined) updateData.is_active = updates.isActive;
+
+      await counter.update(updateData, { transaction });
+      
+      await transaction.commit();
+      return counter;
+    } catch (error) {
+      await transaction.rollback();
+      throw error;
+    }
+  }
+
+  /**
+   * Delete a counter (owner-only)
+   */
+  async deleteCounter(ownerId: number, counterId: number): Promise<void> {
+    const transaction = await sequelize.transaction();
+    
+    try {
+      const counter = await Counter.findByPk(counterId, { transaction });
+      
+      if (!counter) {
+        throw new Error('Counter not found');
+      }
+      
+      // Verify ownership via location
+      const location = await this.locationRepository.findByIdSimple(counter.location_id, transaction);
+      
+      if (!location || location.owner_id !== ownerId) {
+        throw new Error('Access denied');
+      }
+
+      await counter.destroy({ transaction });
+      
+      await transaction.commit();
+    } catch (error) {
+      await transaction.rollback();
+      throw error;
+    }
+  }
+
+  // ========== STAFF MANAGEMENT ==========
+
+  /**
+   * Get all staff across owner's locations
+   */
+  async getAllStaffForOwner(ownerId: number): Promise<any[]> {
+    // Get all locations owned by this owner
+    const locations = await this.locationRepository.findByOwnerId(ownerId);
+    const locationIds = locations.map(loc => loc.id);
+    
+    if (locationIds.length === 0) {
+      return [];
+    }
+
+    // Get all members for these locations
+    const staffMap = new Map<number, any>();
+    
+    for (const location of locations) {
+      const members = await this.memberRepository.findByLocationId(location.id);
+      
+      for (const member of members) {
+        const user = (member as any).user;
+        if (!user) continue;
+        
+        if (staffMap.has(user.id)) {
+          // Add location to existing staff
+          staffMap.get(user.id).locations.push({
+            id: location.id,
+            name: location.name
+          });
+        } else {
+          // Create new staff entry
+          staffMap.set(user.id, {
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            phone: user.phone,
+            role: member.role,
+            is_active: member.is_active,
+            created_at: member.created_at,
+            locations: [{
+              id: location.id,
+              name: location.name
+            }]
+          });
+        }
+      }
+    }
+    
+    return Array.from(staffMap.values());
+  }
+
+  /**
+   * Invite/create a new staff member
+   */
+  async inviteStaff(
+    ownerId: number,
+    data: InviteStaffRequest
+  ): Promise<any> {
+    const transaction = await sequelize.transaction();
+    
+    try {
+      // Verify owner owns this location
+      const location = await this.locationRepository.findByIdSimple(data.locationId, transaction);
+      
+      if (!location) {
+        throw new Error('Location not found');
+      }
+      
+      if (location.owner_id !== ownerId) {
+        throw new Error('Access denied');
+      }
+
+      // Check if user exists by email
+      let user = await this.userRepository.findByEmail(data.email, transaction);
+      
+      if (!user) {
+        // Create new user
+        const passwordHash = await bcrypt.hash(data.password || 'waitless123', 10);
+        user = await this.userRepository.create({
+          email: data.email,
+          name: data.name,
+          password_hash: passwordHash,
+          role: Role.ADMIN,
+        }, transaction);
+      }
+
+      // Check if already member of this location
+      const existingMember = await this.memberRepository.findByLocationAndUser(
+        data.locationId,
+        user.id,
+        transaction
+      );
+      
+      if (existingMember) {
+        throw new Error('User is already a member of this location');
+      }
+
+      // Create location membership
+      const member = await this.memberRepository.create({
+        location_id: data.locationId,
+        user_id: user.id,
+        role: data.role === 'ADMIN' ? Role.ADMIN : Role.VISITOR,
+        is_active: true,
+      }, transaction);
+
+      await transaction.commit();
+      
+      return {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: member.role,
+        is_active: member.is_active,
+        created_at: member.created_at,
+        locations: [{
+          id: location.id,
+          name: location.name
+        }]
+      };
+    } catch (error) {
+      await transaction.rollback();
+      throw error;
+    }
+  }
+
+  /**
+   * Update staff member details
+   */
+  async updateStaff(
+    ownerId: number,
+    staffId: number,
+    data: UpdateStaffRequest
+  ): Promise<any> {
+    const transaction = await sequelize.transaction();
+    
+    try {
+      // Get user
+      const user = await this.userRepository.findById(staffId, transaction);
+      
+      if (!user) {
+        throw new Error('Staff not found');
+      }
+
+      // Verify this staff is a member of one of owner's locations
+      const ownerLocations = await this.locationRepository.findByOwnerId(ownerId, transaction);
+      const ownerLocationIds = ownerLocations.map(l => l.id);
+      
+      const memberships = await this.memberRepository.findByUserId(staffId, transaction);
+      const relevantMemberships = memberships.filter(m => ownerLocationIds.includes(m.location_id));
+      
+      if (relevantMemberships.length === 0) {
+        throw new Error('Access denied');
+      }
+
+      // Update user name if provided
+      if (data.name) {
+        await this.userRepository.update(staffId, { name: data.name }, transaction);
+      }
+
+      // Update locationId (branch) if provided - this changes which location the staff belongs to
+      if (data.locationId) {
+        // Verify new location is owned by this owner
+        if (!ownerLocationIds.includes(data.locationId)) {
+          throw new Error('Invalid location: You can only assign staff to your own locations');
+        }
+        
+        // Update the location_id in the membership record
+        // For simplicity, update the first relevant membership to the new location
+        const currentMembership = relevantMemberships[0];
+        if (currentMembership.location_id !== data.locationId) {
+          await this.memberRepository.update(
+            currentMembership.id, 
+            { location_id: data.locationId }, 
+            transaction
+          );
+        }
+      }
+
+      // Update role in location_members if provided
+      if (data.role) {
+        const newRole = data.role === 'ADMIN' ? Role.ADMIN : Role.VISITOR;
+        // Get fresh memberships after potential location update
+        const updatedMemberships = await this.memberRepository.findByUserId(staffId, transaction);
+        for (const membership of updatedMemberships) {
+          if (ownerLocationIds.includes(membership.location_id)) {
+            await this.memberRepository.update(membership.id, { role: newRole }, transaction);
+          }
+        }
+      }
+
+      // Update is_active in location_members if provided
+      if (data.is_active !== undefined) {
+        const updatedMemberships = await this.memberRepository.findByUserId(staffId, transaction);
+        for (const membership of updatedMemberships) {
+          if (ownerLocationIds.includes(membership.location_id)) {
+            await this.memberRepository.update(membership.id, { is_active: data.is_active }, transaction);
+          }
+        }
+      }
+
+      await transaction.commit();
+      
+      // Return updated staff
+      const updatedStaff = await this.getAllStaffForOwner(ownerId);
+      return updatedStaff.find(s => s.id === staffId);
+    } catch (error) {
+      await transaction.rollback();
+      throw error;
+    }
+  }
+
+  /**
+   * Toggle staff active status
+   */
+  async toggleStaffStatus(ownerId: number, staffId: number): Promise<any> {
+    const transaction = await sequelize.transaction();
+    
+    try {
+      // Verify owner has access to this staff
+      const ownerLocations = await this.locationRepository.findByOwnerId(ownerId, transaction);
+      const ownerLocationIds = ownerLocations.map(l => l.id);
+      
+      const memberships = await this.memberRepository.findByUserId(staffId, transaction);
+      const relevantMemberships = memberships.filter(m => ownerLocationIds.includes(m.location_id));
+      
+      if (relevantMemberships.length === 0) {
+        throw new Error('Access denied');
+      }
+
+      // Toggle status for all relevant memberships
+      const currentStatus = relevantMemberships[0].is_active;
+      const newStatus = !currentStatus;
+      
+      for (const membership of relevantMemberships) {
+        await this.memberRepository.update(membership.id, { is_active: newStatus }, transaction);
+      }
+
+      await transaction.commit();
+      
+      // Return updated staff
+      const updatedStaff = await this.getAllStaffForOwner(ownerId);
+      return updatedStaff.find(s => s.id === staffId) || { id: staffId, is_active: newStatus };
+    } catch (error) {
+      await transaction.rollback();
+      throw error;
+    }
+  }
+
+  /**
+   * Remove staff from owner's locations
+   */
+  async removeStaff(ownerId: number, staffId: number): Promise<void> {
+    const transaction = await sequelize.transaction();
+    
+    try {
+      // Verify owner has access to this staff
+      const ownerLocations = await this.locationRepository.findByOwnerId(ownerId, transaction);
+      const ownerLocationIds = ownerLocations.map(l => l.id);
+      
+      const memberships = await this.memberRepository.findByUserId(staffId, transaction);
+      const relevantMemberships = memberships.filter(m => ownerLocationIds.includes(m.location_id));
+      
+      if (relevantMemberships.length === 0) {
+        throw new Error('Access denied');
+      }
+
+      // Delete memberships
+      for (const membership of relevantMemberships) {
+        await this.memberRepository.delete(membership.id, transaction);
+      }
+
+      await transaction.commit();
+    } catch (error) {
+      await transaction.rollback();
+      throw error;
+    }
   }
 }

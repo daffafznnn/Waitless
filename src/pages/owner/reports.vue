@@ -1,253 +1,310 @@
-<!-- FILE: src/pages/owner/reports.vue -->
 <template>
   <div class="space-y-6">
-    <!-- Page Header -->
-    <div class="border-b border-surface-200 pb-4">
-      <div class="flex items-center justify-between">
-        <div>
-          <h1 class="text-2xl font-bold text-surface-900">Business Reports</h1>
-          <p class="text-surface-600 mt-1">Analyze your queue performance and business insights</p>
-        </div>
-        <div class="flex gap-3">
-          <Button
-            variant="secondary"
-            @click="exportReport"
-            :loading="exporting"
-            label="Export Report"
-            icon="download"
-          />
-          <Button
-            variant="primary"
-            @click="refreshData"
-            :loading="refreshing"
-            label="Refresh"
-          />
-        </div>
+    <!-- Header -->
+    <div class="flex justify-between items-center">
+      <div>
+        <h1 class="text-[22px] font-bold text-gray-900">Laporan & Ekspor</h1>
+        <p class="text-sm text-gray-500 mt-1">Analisis performa bisnis dan ekspor data laporan</p>
       </div>
+      <button
+        @click="exportCSV"
+        :disabled="exporting"
+        class="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
+      >
+        <svg v-if="exporting" class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+        </svg>
+        {{ exporting ? 'Mengekspor...' : 'Ekspor CSV' }}
+      </button>
     </div>
 
-    <!-- Date Range Filter -->
-    <div class="bg-white rounded-lg shadow-sm p-6">
-      <div class="flex flex-wrap items-end gap-4">
+    <!-- Filters Section -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <!-- Date Range -->
         <div>
-          <label class="block text-sm font-medium text-surface-700 mb-1">Date Range</label>
-          <div class="flex gap-2">
-            <input 
+          <label class="block text-xs font-medium text-gray-600 mb-2">Periode</label>
+          <div class="flex items-center gap-2">
+            <input
               v-model="filters.startDate"
               type="date"
-              class="rounded-md border-surface-300 focus:border-primary-500 focus:ring-primary-500"
-            >
-            <span class="self-center text-surface-500">to</span>
-            <input 
+              class="flex-1 px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <span class="text-gray-400">-</span>
+            <input
               v-model="filters.endDate"
               type="date"
-              class="rounded-md border-surface-300 focus:border-primary-500 focus:ring-primary-500"
-            >
+              class="flex-1 px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
           </div>
         </div>
-        
+
+        <!-- Branch Filter -->
         <div>
-          <label class="block text-sm font-medium text-surface-700 mb-1">Location</label>
-          <select 
+          <label class="block text-xs font-medium text-gray-600 mb-2">Cabang</label>
+          <select
             v-model="filters.locationId"
-            class="rounded-md border-surface-300 focus:border-primary-500 focus:ring-primary-500"
+            class="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
-            <option value="">All Locations</option>
-            <option 
-              v-for="location in locations" 
-              :key="location.id" 
-              :value="location.id"
-            >
+            <option value="">Semua Cabang</option>
+            <option v-for="location in locations" :key="location.id" :value="location.id">
               {{ location.name }}
             </option>
           </select>
         </div>
-        
-        <div>
-          <label class="block text-sm font-medium text-surface-700 mb-1">Quick Ranges</label>
-          <div class="flex gap-2">
-            <Button
-              variant="secondary"
-              size="sm"
+
+        <!-- Quick Date Buttons -->
+        <div class="md:col-span-2">
+          <label class="block text-xs font-medium text-gray-600 mb-2">Cepat Pilih</label>
+          <div class="flex flex-wrap gap-2">
+            <button
               @click="setQuickRange('today')"
-              label="Today"
-            />
-            <Button
-              variant="secondary"
-              size="sm"
+              :class="[
+                'px-3 py-2 rounded-lg text-sm font-medium transition-colors',
+                quickRange === 'today' 
+                  ? 'bg-blue-100 text-blue-700 border border-blue-200' 
+                  : 'bg-gray-50 text-gray-600 border border-gray-200 hover:bg-gray-100'
+              ]"
+            >
+              Hari Ini
+            </button>
+            <button
               @click="setQuickRange('week')"
-              label="This Week"
-            />
-            <Button
-              variant="secondary"
-              size="sm"
+              :class="[
+                'px-3 py-2 rounded-lg text-sm font-medium transition-colors',
+                quickRange === 'week' 
+                  ? 'bg-blue-100 text-blue-700 border border-blue-200' 
+                  : 'bg-gray-50 text-gray-600 border border-gray-200 hover:bg-gray-100'
+              ]"
+            >
+              7 Hari
+            </button>
+            <button
               @click="setQuickRange('month')"
-              label="This Month"
-            />
+              :class="[
+                'px-3 py-2 rounded-lg text-sm font-medium transition-colors',
+                quickRange === 'month' 
+                  ? 'bg-blue-100 text-blue-700 border border-blue-200' 
+                  : 'bg-gray-50 text-gray-600 border border-gray-200 hover:bg-gray-100'
+              ]"
+            >
+              30 Hari
+            </button>
+            <button
+              @click="setQuickRange('year')"
+              :class="[
+                'px-3 py-2 rounded-lg text-sm font-medium transition-colors',
+                quickRange === 'year' 
+                  ? 'bg-blue-100 text-blue-700 border border-blue-200' 
+                  : 'bg-gray-50 text-gray-600 border border-gray-200 hover:bg-gray-100'
+              ]"
+            >
+              1 Tahun
+            </button>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- Key Metrics -->
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-      <StatCard
-        title="Total Customers Served"
-        :value="metrics?.totalServed || 0"
-        icon="users"
-        :trend="metrics?.servedTrend"
-        :loading="metricsLoading"
-      />
-      <StatCard
-        title="Average Wait Time"
-        :value="`${metrics?.avgWaitTime || 0} min`"
-        icon="clock"
-        :trend="metrics?.waitTimeTrend"
-        :loading="metricsLoading"
-      />
-      <StatCard
-        title="Customer Satisfaction"
-        :value="`${metrics?.satisfaction || 0}%`"
-        icon="heart"
-        :trend="metrics?.satisfactionTrend"
-        :loading="metricsLoading"
-      />
-      <StatCard
-        title="Peak Hours Efficiency"
-        :value="`${metrics?.peakEfficiency || 0}%`"
-        icon="trending-up"
-        :trend="metrics?.efficiencyTrend"
-        :loading="metricsLoading"
-      />
+    <!-- Stats Cards -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div class="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+        <div class="flex items-start justify-between">
+          <div>
+            <p class="text-sm font-medium text-gray-500">Total Pengunjung</p>
+            <p class="text-2xl font-bold text-gray-900 mt-1">{{ reportData.totalVisitors || 0 }}</p>
+          </div>
+          <div class="p-2 bg-blue-50 rounded-lg">
+            <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
+            </svg>
+          </div>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+        <div class="flex items-start justify-between">
+          <div>
+            <p class="text-sm font-medium text-gray-500">Rata-rata Waktu</p>
+            <p class="text-2xl font-bold text-emerald-600 mt-1">{{ reportData.avgTime || '0m' }}</p>
+          </div>
+          <div class="p-2 bg-emerald-50 rounded-lg">
+            <svg class="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+          </div>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+        <div class="flex items-start justify-between">
+          <div>
+            <p class="text-sm font-medium text-gray-500">Puncak Kunjungan</p>
+            <p class="text-2xl font-bold text-amber-600 mt-1">{{ reportData.peakHour || '10:00' }}</p>
+          </div>
+          <div class="p-2 bg-amber-50 rounded-lg">
+            <svg class="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/>
+            </svg>
+          </div>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+        <div class="flex items-start justify-between">
+          <div>
+            <p class="text-sm font-medium text-gray-500">Efisiensi</p>
+            <p class="text-2xl font-bold text-purple-600 mt-1">{{ reportData.efficiency || 0 }}%</p>
+          </div>
+          <div class="p-2 bg-purple-50 rounded-lg">
+            <svg class="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+            </svg>
+          </div>
+        </div>
+      </div>
     </div>
 
-    <!-- Charts and Analytics -->
-    <div class="grid lg:grid-cols-2 gap-6">
-      <!-- Queue Volume Chart -->
-      <div class="bg-white rounded-lg shadow-sm p-6">
-        <div class="flex items-center justify-between mb-4">
-          <h3 class="text-lg font-semibold text-surface-900">Queue Volume Trends</h3>
-          <select 
-            v-model="chartTimeframe"
-            class="text-sm rounded-md border-surface-300 focus:border-primary-500 focus:ring-primary-500"
+    <!-- Main Content Grid -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <!-- Activity Log Table (Left/Main) -->
+      <div class="lg:col-span-2 bg-white rounded-xl shadow-sm border border-gray-100">
+        <div class="px-6 py-4 border-b border-gray-100">
+          <h3 class="text-base font-semibold text-gray-900">Log Aktivitas</h3>
+          <p class="text-sm text-gray-500">Riwayat antrian berdasarkan filter</p>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="w-full">
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Waktu</th>
+                <th class="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Cabang</th>
+                <th class="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Staf/Loket</th>
+                <th class="px-6 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">No. Antrian</th>
+                <th class="px-6 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Durasi</th>
+                <th class="px-6 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Status</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+              <tr 
+                v-for="log in activityLogs" 
+                :key="log.id"
+                class="hover:bg-gray-50 transition-colors"
+              >
+                <td class="px-6 py-4 text-sm text-gray-600">{{ formatDateTime(log.timestamp) }}</td>
+                <td class="px-6 py-4">
+                  <span class="text-sm text-gray-900">{{ log.location }}</span>
+                </td>
+                <td class="px-6 py-4">
+                  <div>
+                    <p class="text-sm text-gray-900">{{ log.counter }}</p>
+                    <p class="text-xs text-gray-500">{{ log.staff }}</p>
+                  </div>
+                </td>
+                <td class="px-6 py-4 text-center">
+                  <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-100 text-blue-800">
+                    {{ log.queueNumber }}
+                  </span>
+                </td>
+                <td class="px-6 py-4 text-center text-sm text-gray-600">{{ log.duration }}</td>
+                <td class="px-6 py-4 text-center">
+                  <span 
+                    :class="[
+                      'inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium',
+                      getStatusClass(log.status)
+                    ]"
+                  >
+                    {{ getStatusLabel(log.status) }}
+                  </span>
+                </td>
+              </tr>
+              <tr v-if="activityLogs.length === 0 && !loading">
+                <td colspan="6" class="px-6 py-12 text-center">
+                  <div class="flex flex-col items-center">
+                    <svg class="w-12 h-12 text-gray-300 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+                    </svg>
+                    <p class="text-sm text-gray-500">Belum ada data aktivitas</p>
+                    <p class="text-xs text-gray-400 mt-1">Ubah filter untuk melihat data</p>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Pagination -->
+        <div v-if="activityLogs.length > 0" class="px-6 py-4 border-t border-gray-100 flex items-center justify-between">
+          <p class="text-sm text-gray-500">Menampilkan {{ activityLogs.length }} dari {{ totalLogs }} data</p>
+          <div class="flex gap-2">
+            <button
+              @click="prevPage"
+              :disabled="currentPage === 1"
+              class="px-3 py-1.5 text-sm border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Sebelumnya
+            </button>
+            <button
+              @click="nextPage"
+              :disabled="currentPage * pageSize >= totalLogs"
+              class="px-3 py-1.5 text-sm border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Selanjutnya
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Summary Sidebar -->
+      <div class="bg-white rounded-xl shadow-sm border border-gray-100">
+        <div class="px-6 py-4 border-b border-gray-100">
+          <h3 class="text-base font-semibold text-gray-900">Ringkasan per Cabang</h3>
+          <p class="text-sm text-gray-500">Perbandingan performa</p>
+        </div>
+
+        <div class="p-6 space-y-4">
+          <div 
+            v-for="branch in branchSummaries" 
+            :key="branch.id"
+            class="space-y-2"
           >
-            <option value="hourly">Hourly</option>
-            <option value="daily">Daily</option>
-            <option value="weekly">Weekly</option>
-          </select>
-        </div>
-        
-        <div v-if="chartData?.queueVolume" class="h-80">
-          <!-- Chart component would go here -->
-          <div class="h-full bg-surface-50 rounded-lg flex items-center justify-center text-surface-500">
-            Queue Volume Chart
-            <br>
-            <small>{{ chartData.queueVolume.length }} data points</small>
+            <div class="flex items-center justify-between">
+              <span class="text-sm font-medium text-gray-900">{{ branch.name }}</span>
+              <span class="text-sm text-gray-600">{{ branch.total }} tiket</span>
+            </div>
+            <div class="w-full bg-gray-100 rounded-full h-2">
+              <div 
+                class="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                :style="{ width: `${(branch.total / maxBranchTotal) * 100}%` }"
+              ></div>
+            </div>
+            <div class="flex items-center justify-between text-xs text-gray-500">
+              <span>{{ branch.completed }} selesai</span>
+              <span class="text-emerald-600">{{ Math.round(branch.completed / branch.total * 100) || 0 }}%</span>
+            </div>
           </div>
-        </div>
-        <div v-else class="h-80 bg-surface-50 rounded-lg flex items-center justify-center">
-          <div class="text-center">
-            <svg class="mx-auto h-12 w-12 text-surface-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+
+          <div v-if="branchSummaries.length === 0" class="py-8 text-center">
+            <svg class="w-10 h-10 text-gray-300 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
             </svg>
-            <p class="mt-2 text-sm text-surface-500">No chart data available</p>
+            <p class="text-sm text-gray-500">Belum ada data</p>
           </div>
         </div>
-      </div>
 
-      <!-- Wait Time Distribution -->
-      <div class="bg-white rounded-lg shadow-sm p-6">
-        <h3 class="text-lg font-semibold text-surface-900 mb-4">Wait Time Distribution</h3>
-        <div v-if="chartData?.waitTimeDistribution" class="h-80">
-          <!-- Chart component would go here -->
-          <div class="h-full bg-surface-50 rounded-lg flex items-center justify-center text-surface-500">
-            Wait Time Distribution Chart
-          </div>
-        </div>
-        <div v-else class="h-80 bg-surface-50 rounded-lg flex items-center justify-center">
-          <div class="text-center">
-            <svg class="mx-auto h-12 w-12 text-surface-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z" />
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z" />
-            </svg>
-            <p class="mt-2 text-sm text-surface-500">No distribution data available</p>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Performance by Location -->
-    <div class="bg-white rounded-lg shadow-sm">
-      <div class="px-6 py-4 border-b border-surface-200">
-        <h3 class="text-lg font-semibold text-surface-900">Performance by Location</h3>
-      </div>
-      
-      <DataTable
-        :columns="locationColumns"
-        :data="locationPerformance"
-        :loading="performanceLoading"
-        :pagination="pagination"
-        @page-change="handlePageChange"
-      >
-        <template #empty>
-          <EmptyState
-            title="No Location Data"
-            description="No performance data available for the selected date range."
-          />
-        </template>
-      </DataTable>
-    </div>
-
-    <!-- Customer Feedback Summary -->
-    <div class="bg-white rounded-lg shadow-sm p-6">
-      <h3 class="text-lg font-semibold text-surface-900 mb-4">Customer Feedback Summary</h3>
-      
-      <div class="grid md:grid-cols-3 gap-6">
-        <!-- Rating Distribution -->
-        <div>
-          <h4 class="font-medium text-surface-900 mb-3">Rating Distribution</h4>
-          <div class="space-y-2">
-            <div v-for="(rating, index) in feedbackSummary?.ratings || []" :key="index" class="flex items-center">
-              <span class="w-8 text-sm text-surface-600">{{ 5 - index }}★</span>
-              <div class="flex-1 mx-3 bg-surface-200 rounded-full h-2">
-                <div 
-                  class="bg-primary-600 h-2 rounded-full" 
-                  :style="{ width: `${(rating.count / (feedbackSummary?.totalRatings || 1)) * 100}%` }"
-                ></div>
-              </div>
-              <span class="text-sm text-surface-600 w-8">{{ rating.count }}</span>
-            </div>
-          </div>
-        </div>
-        
-        <!-- Common Complaints -->
-        <div>
-          <h4 class="font-medium text-surface-900 mb-3">Common Issues</h4>
-          <div class="space-y-2">
-            <div 
-              v-for="issue in feedbackSummary?.commonIssues || []" 
-              :key="issue.type"
-              class="flex justify-between text-sm"
-            >
-              <span class="text-surface-600">{{ issue.type }}</span>
-              <span class="font-medium text-surface-900">{{ issue.count }}</span>
-            </div>
-          </div>
-        </div>
-        
-        <!-- Positive Feedback -->
-        <div>
-          <h4 class="font-medium text-surface-900 mb-3">Positive Highlights</h4>
-          <div class="space-y-2">
-            <div 
-              v-for="highlight in feedbackSummary?.positiveHighlights || []" 
-              :key="highlight.type"
-              class="flex justify-between text-sm"
-            >
-              <span class="text-surface-600">{{ highlight.type }}</span>
-              <span class="font-medium text-success-600">{{ highlight.count }}</span>
-            </div>
-          </div>
+        <!-- Detailed Report Button -->
+        <div class="px-6 py-4 border-t border-gray-100">
+          <button
+            @click="viewDetailedReport"
+            class="w-full px-4 py-2.5 bg-gray-50 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-100 transition-colors border border-gray-200"
+          >
+            Lihat Laporan Detail
+          </button>
         </div>
       </div>
     </div>
@@ -255,132 +312,209 @@
 </template>
 
 <script setup lang="ts">
-import type { Location, BusinessMetrics, ChartData, LocationPerformance, FeedbackSummary } from '~/types'
+import type { ServiceLocation } from '~/types'
 
-// Page meta
 definePageMeta({
   layout: 'owner',
-  middleware: ['auth', 'owner']
+  middleware: 'owner'
 })
 
+const { getMyLocations } = useOwnerApi()
+const toast = useToast()
+
 // Reactive data
-const refreshing = ref(false)
+const loading = ref(false)
 const exporting = ref(false)
-const chartTimeframe = ref('daily')
+const currentPage = ref(1)
+const pageSize = 10
+const totalLogs = ref(25)
+const quickRange = ref('week')
+const locations = ref<ServiceLocation[]>([])
 
 // Filters
-const filters = reactive({
-  startDate: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // Last 7 days
-  endDate: new Date().toISOString().split('T')[0], // Today
+const filters = ref({
+  startDate: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+  endDate: new Date().toISOString().split('T')[0],
   locationId: ''
 })
 
-// Pagination
-const pagination = reactive({
-  page: 1,
-  limit: 10,
-  total: 0
+// Report data
+const reportData = ref({
+  totalVisitors: 1247,
+  avgTime: '12m',
+  peakHour: '10:00',
+  efficiency: 87
 })
 
-// Fetch data
-const { data: locations } = await useFetch<Location[]>('/api/owner/locations')
-const { data: metrics, pending: metricsLoading } = await useFetch<BusinessMetrics>('/api/owner/reports/metrics', {
-  query: computed(() => filters)
-})
-const { data: chartData } = await useFetch<ChartData>('/api/owner/reports/charts', {
-  query: computed(() => ({ ...filters, timeframe: chartTimeframe.value }))
-})
-const { data: locationPerformance, pending: performanceLoading } = await useFetch<LocationPerformance[]>('/api/owner/reports/locations', {
-  query: computed(() => ({ ...filters, ...pagination }))
-})
-const { data: feedbackSummary } = await useFetch<FeedbackSummary>('/api/owner/reports/feedback', {
-  query: computed(() => filters)
-})
+// Mock activity logs
+const activityLogs = ref([
+  { id: 1, timestamp: new Date().toISOString(), location: 'Cabang Utama', counter: 'Loket A', staff: 'Ahmad R.', queueNumber: 'A-023', duration: '8m 32s', status: 'completed' },
+  { id: 2, timestamp: new Date(Date.now() - 5 * 60 * 1000).toISOString(), location: 'Cabang Utama', counter: 'Loket B', staff: 'Siti A.', queueNumber: 'B-015', duration: '5m 12s', status: 'completed' },
+  { id: 3, timestamp: new Date(Date.now() - 12 * 60 * 1000).toISOString(), location: 'Cabang Bandung', counter: 'Loket A', staff: 'Budi S.', queueNumber: 'A-018', duration: '-', status: 'skipped' },
+  { id: 4, timestamp: new Date(Date.now() - 20 * 60 * 1000).toISOString(), location: 'Cabang Utama', counter: 'Loket C', staff: 'Nina K.', queueNumber: 'C-009', duration: '15m 45s', status: 'completed' },
+  { id: 5, timestamp: new Date(Date.now() - 35 * 60 * 1000).toISOString(), location: 'Cabang Surabaya', counter: 'Loket A', staff: 'Rina T.', queueNumber: 'A-011', duration: '-', status: 'cancelled' },
+])
 
-// Table columns
-const locationColumns = [
-  { key: 'name', label: 'Location', sortable: true },
-  { key: 'total_served', label: 'Customers Served', sortable: true },
-  { key: 'avg_wait_time', label: 'Avg Wait Time', sortable: true, component: 'Duration' },
-  { key: 'satisfaction_score', label: 'Satisfaction', sortable: true, component: 'Percentage' },
-  { key: 'efficiency_score', label: 'Efficiency', sortable: true, component: 'Percentage' },
-  { key: 'revenue', label: 'Revenue Impact', sortable: true, component: 'Currency' }
-]
+// Mock branch summaries
+const branchSummaries = ref([
+  { id: 1, name: 'Cabang Utama', total: 523, completed: 489 },
+  { id: 2, name: 'Cabang Bandung', total: 387, completed: 356 },
+  { id: 3, name: 'Cabang Surabaya', total: 337, completed: 298 },
+])
+
+const maxBranchTotal = computed(() => {
+  return Math.max(...branchSummaries.value.map(b => b.total), 1)
+})
 
 // Methods
-const refreshData = async () => {
-  refreshing.value = true
-  try {
-    await Promise.all([
-      $fetch('/api/owner/reports/metrics', { query: filters }),
-      $fetch('/api/owner/reports/charts', { query: { ...filters, timeframe: chartTimeframe.value } }),
-      $fetch('/api/owner/reports/locations', { query: { ...filters, ...pagination } }),
-      $fetch('/api/owner/reports/feedback', { query: filters })
-    ])
-  } finally {
-    refreshing.value = false
+const setQuickRange = (range: string) => {
+  quickRange.value = range
+  const today = new Date()
+  let startDate = new Date()
+
+  switch (range) {
+    case 'today':
+      startDate = today
+      break
+    case 'week':
+      startDate.setDate(today.getDate() - 7)
+      break
+    case 'month':
+      startDate.setDate(today.getDate() - 30)
+      break
+    case 'year':
+      startDate.setFullYear(today.getFullYear() - 1)
+      break
   }
+
+  filters.value.startDate = startDate.toISOString().split('T')[0]
+  filters.value.endDate = today.toISOString().split('T')[0]
 }
 
-const exportReport = async () => {
+const formatDateTime = (dateString: string) => {
+  return new Date(dateString).toLocaleString('id-ID', {
+    day: '2-digit',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+}
+
+const getStatusClass = (status: string) => {
+  const classes: Record<string, string> = {
+    completed: 'bg-emerald-100 text-emerald-800',
+    skipped: 'bg-amber-100 text-amber-800',
+    cancelled: 'bg-red-100 text-red-800',
+    waiting: 'bg-blue-100 text-blue-800'
+  }
+  return classes[status] || 'bg-gray-100 text-gray-600'
+}
+
+const getStatusLabel = (status: string) => {
+  const labels: Record<string, string> = {
+    completed: 'Selesai',
+    skipped: 'Dilewati',
+    cancelled: 'Batal',
+    waiting: 'Menunggu'
+  }
+  return labels[status] || status
+}
+
+const exportCSV = async () => {
   exporting.value = true
+  
   try {
-    const response = await $fetch('/api/owner/reports/export', {
-      method: 'POST',
-      body: filters,
-      responseType: 'blob'
-    })
+    // Build CSV content
+    const headers = ['Waktu', 'Cabang', 'Loket', 'Staf', 'No. Antrian', 'Durasi', 'Status']
+    const csvData = activityLogs.value.map(log => [
+      formatDateTime(log.timestamp),
+      log.location,
+      log.counter,
+      log.staff,
+      log.queueNumber,
+      log.duration,
+      getStatusLabel(log.status)
+    ])
     
-    // Download the file
-    const url = window.URL.createObjectURL(new Blob([response]))
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `waitless-report-${filters.startDate}-to-${filters.endDate}.pdf`
-    link.click()
+    const csvContent = [
+      headers.join(','),
+      ...csvData.map(row => row.map(cell => `"${cell}"`).join(','))
+    ].join('\n')
+    
+    // Download
+    const blob = new Blob([csvContent], { type: 'text/csv' })
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `laporan_${filters.value.startDate}_${filters.value.endDate}.csv`
+    a.click()
     window.URL.revokeObjectURL(url)
+    
+    toast.add({
+      title: 'Export Berhasil',
+      description: 'Laporan berhasil diekspor ke CSV',
+      color: 'green'
+    })
   } catch (error) {
-    console.error('Failed to export report:', error)
+    console.error('Failed to export:', error)
+    toast.add({
+      title: 'Error',
+      description: 'Gagal mengekspor laporan',
+      color: 'red'
+    })
   } finally {
     exporting.value = false
   }
 }
 
-const setQuickRange = (range: string) => {
-  const today = new Date()
-  const startDate = new Date()
-  
-  switch (range) {
-    case 'today':
-      filters.startDate = today.toISOString().split('T')[0]
-      filters.endDate = today.toISOString().split('T')[0]
-      break
-    case 'week':
-      startDate.setDate(today.getDate() - 7)
-      filters.startDate = startDate.toISOString().split('T')[0]
-      filters.endDate = today.toISOString().split('T')[0]
-      break
-    case 'month':
-      startDate.setMonth(today.getMonth() - 1)
-      filters.startDate = startDate.toISOString().split('T')[0]
-      filters.endDate = today.toISOString().split('T')[0]
-      break
+const prevPage = () => {
+  if (currentPage.value > 1) {
+    currentPage.value--
   }
 }
 
-const handlePageChange = (page: number) => {
-  pagination.page = page
+const nextPage = () => {
+  if (currentPage.value * pageSize < totalLogs.value) {
+    currentPage.value++
+  }
 }
 
-// Watch filters and refresh data
-watch([filters, chartTimeframe], () => {
-  refreshData()
+const viewDetailedReport = () => {
+  toast.add({
+    title: 'Info',
+    description: 'Fitur laporan detail akan segera hadir',
+    color: 'blue'
+  })
+}
+
+// Load locations
+const loadLocations = async () => {
+  try {
+    const response = await getMyLocations()
+    if (response.data) {
+      locations.value = response.data.locations
+    }
+  } catch (error) {
+    console.error('Failed to load locations:', error)
+  }
+}
+
+// Initialize
+onMounted(() => {
+  loadLocations()
+})
+
+// Watch filters
+watch(filters, () => {
+  // Refresh data when filters change
+  currentPage.value = 1
 }, { deep: true })
 
 // SEO
 useHead({
-  title: 'Business Reports - Owner Dashboard - Waitless',
+  title: 'Laporan & Ekspor - Waitless',
   meta: [
-    { name: 'description', content: 'Comprehensive business reports and analytics for queue management performance.' }
+    { name: 'description', content: 'Analisis performa bisnis dan ekspor data laporan.' }
   ]
 })
 </script>

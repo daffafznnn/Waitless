@@ -43,9 +43,30 @@ export class LocationMemberRepository {
   }
 
   /**
-   * Find all members for a location
+   * Find all members for a location (including inactive)
    */
   async findByLocationId(locationId: number, transaction?: Transaction): Promise<LocationMember[]> {
+    return LocationMember.findAll({
+      where: {
+        location_id: locationId,
+        // NOTE: Removed is_active filter to include all staff
+      },
+      include: [
+        {
+          model: User,
+          as: 'user',
+          attributes: ['id', 'name', 'email', 'phone'],
+        },
+      ],
+      order: [['created_at', 'ASC']],
+      transaction,
+    });
+  }
+
+  /**
+   * Find only active members for a location
+   */
+  async findActiveByLocationId(locationId: number, transaction?: Transaction): Promise<LocationMember[]> {
     return LocationMember.findAll({
       where: {
         location_id: locationId,
@@ -64,13 +85,13 @@ export class LocationMemberRepository {
   }
 
   /**
-   * Find all locations for a user
+   * Find all locations for a user (including inactive memberships)
    */
   async findByUserId(userId: number, transaction?: Transaction): Promise<LocationMember[]> {
     return LocationMember.findAll({
       where: {
         user_id: userId,
-        is_active: true,
+        // NOTE: Removed is_active filter to include inactive memberships
       },
       include: [
         {

@@ -9,6 +9,7 @@ import { authRoutes } from './routes/auth.routes';
 import { queueRoutes } from './routes/queue.routes';
 import { adminRoutes } from './routes/admin.routes';
 import { locationRoutes } from './routes/location.routes';
+import { ownerRoutes } from './routes/owner.routes';
 import { logRequests } from './utils/auth-middleware';
 
 dotenv.config();
@@ -33,6 +34,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/queue', queueRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/locations', locationRoutes);
+app.use('/api/owner', ownerRoutes);
 
 app.get('/health', (_req, res) => {
   res.json({

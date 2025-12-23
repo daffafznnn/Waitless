@@ -227,4 +227,15 @@ export class LocationRepository {
     });
     return count > 0;
   }
+
+  /**
+   * Get all counters for a location
+   */
+  async getCountersByLocationId(locationId: number, transaction?: Transaction): Promise<Counter[]> {
+    return Counter.findAll({
+      where: { location_id: locationId },
+      order: [['name', 'ASC']],
+      transaction,
+    });
+  }
 }
