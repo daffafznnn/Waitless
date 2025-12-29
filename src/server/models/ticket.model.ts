@@ -30,21 +30,22 @@ export interface TicketAttributes {
 export interface TicketCreationAttributes extends Optional<TicketAttributes, 'id' | 'created_at' | 'updated_at'> {}
 
 export class Ticket extends Model<TicketAttributes, TicketCreationAttributes> implements TicketAttributes {
-  public id!: number;
-  public location_id!: number;
-  public counter_id!: number;
-  public user_id?: number;
-  public date_for!: string;
-  public sequence!: number;
-  public queue_number!: string;
-  public status!: TicketStatus;
-  public called_at?: Date;
-  public started_at?: Date;
-  public finished_at?: Date;
-  public hold_reason?: string;
+  // Use 'declare' instead of 'public' to avoid shadowing Sequelize getters
+  declare id: number;
+  declare location_id: number;
+  declare counter_id: number;
+  declare user_id?: number;
+  declare date_for: string;
+  declare sequence: number;
+  declare queue_number: string;
+  declare status: TicketStatus;
+  declare called_at?: Date;
+  declare started_at?: Date;
+  declare finished_at?: Date;
+  declare hold_reason?: string;
 
-  public readonly created_at!: Date;
-  public readonly updated_at!: Date;
+  declare readonly created_at: Date;
+  declare readonly updated_at: Date;
 
   static associate(models: any): void {
     Ticket.belongsTo(models.ServiceLocation, {

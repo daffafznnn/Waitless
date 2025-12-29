@@ -1,125 +1,87 @@
 /* FILE: src/server/services/OwnerService.ts */
+/**
+ * Owner Service - Optimized
+ * 
+ * Handles owner-related operations with:
+ * - BaseService integration for common functionality
+ * - Jakarta timezone for date handling
+ * - Proper error classes
+ * - Extracted helper methods
+ */
+
+import { Transaction } from 'sequelize';
+import { BaseService } from './BaseService';
 import { UserRepository } from '../repositories/UserRepository';
 import { LocationRepository } from '../repositories/LocationRepository';
 import { SummaryRepository } from '../repositories/SummaryRepository';
 import { LocationMemberRepository } from '../repositories/LocationMemberRepository';
-import { sequelize } from '../db';
 import { ServiceLocation } from '../models/service_location.model';
 import { Counter } from '../models/counter.model';
-import { User, Role } from '../models/user.model';
+import { Role } from '../models/user.model';
 import bcrypt from 'bcrypt';
+import { 
+  NotFoundError, 
+  ConflictError,
+  ForbiddenError,
+  BusinessLogicError
+} from '../types/errors';
+import type { 
+  CreateLocationRequest, 
+  UpdateLocationRequest, 
+  CreateCounterRequest, 
+  UpdateCounterRequest,
+  InviteStaffRequest,
+  UpdateStaffRequest 
+} from '../types';
 
-export interface CreateLocationRequest {
-  name: string;
-  address?: string;
-  city?: string;
-  lat?: number;
-  lng?: number;
-}
+// Re-export types for backwards compatibility
+export type { 
+  CreateLocationRequest, 
+  UpdateLocationRequest,
+  CreateCounterRequest,
+  UpdateCounterRequest,
+  InviteStaffRequest,
+  UpdateStaffRequest
+};
 
-export interface UpdateLocationRequest {
-  name?: string;
-  address?: string;
-  city?: string;
-  lat?: number;
-  lng?: number;
-  isActive?: boolean;
-}
-
-export interface AddLocationMemberRequest {
-  userId?: number;
-  email?: string;
-  role: Role;
-}
-
-export interface CreateCounterRequest {
-  name: string;
-  description?: string;
-  prefix: string;
-  openTime?: string;
-  closeTime?: string;
-  capacityPerDay?: number;
-}
-
-export interface UpdateCounterRequest {
-  name?: string;
-  description?: string;
-  prefix?: string;
-  openTime?: string;
-  closeTime?: string;
-  capacityPerDay?: number;
-  isActive?: boolean;
-}
-
-export interface InviteStaffRequest {
-  email: string;
-  name: string;
-  locationId: number;
-  role: string;
-  password?: string;
-}
-
-export interface UpdateStaffRequest {
-  name?: string;
-  role?: string;
-  locationId?: number;
-  is_active?: boolean;
-}
-
-export class OwnerService {
+export class OwnerService extends BaseService {
   private userRepository: UserRepository;
   private locationRepository: LocationRepository;
   private summaryRepository: SummaryRepository;
   private memberRepository: LocationMemberRepository;
 
   constructor() {
+    super('OwnerService');
     this.userRepository = new UserRepository();
     this.locationRepository = new LocationRepository();
     this.summaryRepository = new SummaryRepository();
     this.memberRepository = new LocationMemberRepository();
   }
 
+  // ============================================
+  // Location Management
+  // ============================================
+
   /**
    * Create a new service location
    */
   async createLocation(ownerId: number, locationData: CreateLocationRequest): Promise<ServiceLocation> {
-    const transaction = await sequelize.transaction();
-    
-    try {
-      // Verify user is owner
-      const owner = await this.userRepository.findById(ownerId, transaction);
-      if (!owner || owner.role !== Role.OWNER) {
-        throw new Error('Only owners can create locations');
-      }
+    const validOwnerId = this.validateId(ownerId, 'Owner ID');
 
-      // Check if location name already exists for this owner
-      const nameExists = await this.locationRepository.existsForOwner(
-        ownerId,
-        locationData.name,
-        transaction
-      );
+    return this.withTransaction(async (t) => {
+      await this.ensureIsOwner(validOwnerId, t);
+      await this.ensureLocationNameUnique(validOwnerId, locationData.name, undefined, t);
 
-      if (nameExists) {
-        throw new Error('Location name already exists for this owner');
-      }
-
-      // Create location
-      const location = await this.locationRepository.create({
-        owner_id: ownerId,
+      return this.locationRepository.create({
+        owner_id: validOwnerId,
         name: locationData.name,
         address: locationData.address,
         city: locationData.city,
         lat: locationData.lat,
         lng: locationData.lng,
         is_active: true,
-      }, transaction);
-
-      await transaction.commit();
-      return location;
-    } catch (error) {
-      await transaction.rollback();
-      throw error;
-    }
+      }, t);
+    });
   }
 
   /**
@@ -130,103 +92,63 @@ export class OwnerService {
     locationId: number,
     updates: UpdateLocationRequest
   ): Promise<ServiceLocation> {
-    const transaction = await sequelize.transaction();
-    
-    try {
-      // Verify ownership
-      const location = await this.locationRepository.findByIdSimple(locationId, transaction);
-      if (!location) {
-        throw new Error('Location not found');
-      }
+    const validOwnerId = this.validateId(ownerId, 'Owner ID');
+    const validLocationId = this.validateId(locationId, 'Location ID');
 
-      if (location.owner_id !== ownerId) {
-        throw new Error('You can only update your own locations');
-      }
+    return this.withTransaction(async (t) => {
+      const location = await this.getLocationOrThrow(validLocationId, t);
+      this.ensureOwnership(location, validOwnerId);
 
-      // Check name uniqueness if updating name
       if (updates.name && updates.name !== location.name) {
-        const nameExists = await this.locationRepository.existsForOwner(
-          ownerId,
-          updates.name,
-          transaction
-        );
-        if (nameExists) {
-          throw new Error('Location name already exists for this owner');
-        }
+        await this.ensureLocationNameUnique(validOwnerId, updates.name, validLocationId, t);
       }
 
-      // Update location
-      const updateData: any = {};
-      if (updates.name) updateData.name = updates.name;
-      if (updates.address !== undefined) updateData.address = updates.address;
-      if (updates.city !== undefined) updateData.city = updates.city;
-      if (updates.lat !== undefined) updateData.lat = updates.lat;
-      if (updates.lng !== undefined) updateData.lng = updates.lng;
-      if (updates.isActive !== undefined) updateData.is_active = updates.isActive;
+      const updateData = this.buildLocationUpdateData(updates);
+      await this.locationRepository.update(validLocationId, updateData, t);
 
-      await this.locationRepository.update(locationId, updateData, transaction);
-
-      // Get updated location
-      const updatedLocation = await this.locationRepository.findById(locationId, transaction);
-      
-      await transaction.commit();
-      return updatedLocation!;
-    } catch (error) {
-      await transaction.rollback();
-      throw error;
-    }
+      return (await this.locationRepository.findById(validLocationId, t))!;
+    });
   }
 
   /**
    * Delete a location
    */
   async deleteLocation(ownerId: number, locationId: number): Promise<void> {
-    const transaction = await sequelize.transaction();
-    
-    try {
-      // Verify ownership
-      const location = await this.locationRepository.findByIdSimple(locationId, transaction);
-      if (!location) {
-        throw new Error('Location not found');
-      }
+    const validOwnerId = this.validateId(ownerId, 'Owner ID');
+    const validLocationId = this.validateId(locationId, 'Location ID');
 
-      if (location.owner_id !== ownerId) {
-        throw new Error('You can only delete your own locations');
-      }
-
-      // Delete location
-      await this.locationRepository.delete(locationId, transaction);
-      
-      await transaction.commit();
-    } catch (error) {
-      await transaction.rollback();
-      throw error;
-    }
+    return this.withTransaction(async (t) => {
+      const location = await this.getLocationOrThrow(validLocationId, t);
+      this.ensureOwnership(location, validOwnerId);
+      await this.locationRepository.delete(validLocationId, t);
+    });
   }
 
   /**
    * Get all locations for an owner
    */
   async getMyLocations(ownerId: number): Promise<ServiceLocation[]> {
-    return this.locationRepository.findByOwnerId(ownerId);
+    const validOwnerId = this.validateId(ownerId, 'Owner ID');
+    return this.locationRepository.findByOwnerId(validOwnerId);
   }
 
   /**
    * Get location details by ID
    */
   async getLocationById(ownerId: number, locationId: number): Promise<ServiceLocation> {
-    const location = await this.locationRepository.findById(locationId);
-    
-    if (!location) {
-      throw new Error('Location not found');
-    }
+    const validOwnerId = this.validateId(ownerId, 'Owner ID');
+    const validLocationId = this.validateId(locationId, 'Location ID');
 
-    if (location.owner_id !== ownerId) {
-      throw new Error('Access denied');
-    }
+    const location = await this.locationRepository.findById(validLocationId);
+    if (!location) throw new NotFoundError('Cabang');
+    this.ensureOwnership(location, validOwnerId);
 
     return location;
   }
+
+  // ============================================
+  // Analytics & Dashboard
+  // ============================================
 
   /**
    * Get location performance analytics
@@ -237,63 +159,40 @@ export class OwnerService {
     startDate: string,
     endDate: string
   ) {
-    const transaction = await sequelize.transaction();
-    
-    try {
-      // Verify ownership
-      const location = await this.locationRepository.findByIdSimple(locationId, transaction);
-      if (!location || location.owner_id !== ownerId) {
-        throw new Error('Location not found or access denied');
-      }
+    const validOwnerId = this.validateId(ownerId, 'Owner ID');
+    const validLocationId = this.validateId(locationId, 'Location ID');
 
-      // Get aggregated statistics
-      const stats = await this.summaryRepository.getAggregatedStats(
-        locationId,
-        startDate,
-        endDate,
-        transaction
-      );
+    return this.withTransaction(async (t) => {
+      const location = await this.getLocationOrThrow(validLocationId, t);
+      this.ensureOwnership(location, validOwnerId);
 
-      // Get daily summaries for the period
-      const dailySummaries = await this.summaryRepository.findByLocationAndDateRange(
-        locationId,
-        startDate,
-        endDate,
-        transaction
-      );
-
-      await transaction.commit();
+      const [stats, dailySummaries] = await Promise.all([
+        this.summaryRepository.getAggregatedStats(validLocationId, startDate, endDate, t),
+        this.summaryRepository.findByLocationAndDateRange(validLocationId, startDate, endDate, t),
+      ]);
 
       return {
-        locationId,
+        locationId: validLocationId,
         locationName: location.name,
         period: { startDate, endDate },
         aggregated: stats,
         daily: dailySummaries,
       };
-    } catch (error) {
-      await transaction.rollback();
-      throw error;
-    }
+    });
   }
 
   /**
    * Get multi-location dashboard for owner
    */
   async getOwnerDashboard(ownerId: number, date?: string) {
-    const targetDate = date || new Date().toISOString().split('T')[0];
+    const validOwnerId = this.validateId(ownerId, 'Owner ID');
+    const targetDate = this.getQueryDate(date);
     
-    // Get all owner's locations
-    const locations = await this.locationRepository.findByOwnerId(ownerId);
+    const locations = await this.locationRepository.findByOwnerId(validOwnerId);
     
-    // Get today's summaries for all locations
     const locationStats = await Promise.all(
       locations.map(async (location) => {
-        const summary = await this.summaryRepository.findByLocationAndDate(
-          location.id,
-          targetDate
-        );
-        
+        const summary = await this.summaryRepository.findByLocationAndDate(location.id, targetDate);
         return {
           location: {
             id: location.id,
@@ -301,42 +200,19 @@ export class OwnerService {
             city: location.city,
             isActive: location.is_active,
           },
-          summary: summary || {
-            total_issued: 0,
-            total_done: 0,
-            total_hold: 0,
-            total_cancel: 0,
-            avg_service_seconds: 0,
-          },
+          summary: summary || this.getEmptySummary(),
         };
       })
     );
 
-    // Calculate totals
-    const totals = locationStats.reduce(
-      (acc, stat) => ({
-        totalIssued: acc.totalIssued + stat.summary.total_issued,
-        totalDone: acc.totalDone + stat.summary.total_done,
-        totalHold: acc.totalHold + stat.summary.total_hold,
-        totalCancel: acc.totalCancel + stat.summary.total_cancel,
-        avgServiceSeconds: acc.avgServiceSeconds + stat.summary.avg_service_seconds,
-      }),
-      { totalIssued: 0, totalDone: 0, totalHold: 0, totalCancel: 0, avgServiceSeconds: 0 }
-    );
-
-    // Calculate completion rate
-    const completionRate = totals.totalIssued > 0 
-      ? (totals.totalDone / totals.totalIssued) * 100 
-      : 0;
+    const totals = this.calculateDashboardTotals(locationStats);
+    const completionRate = totals.totalIssued > 0 ? (totals.totalDone / totals.totalIssued) * 100 : 0;
 
     return {
       date: targetDate,
       locationsCount: locations.length,
       activeLocationsCount: locations.filter(l => l.is_active).length,
-      totals: {
-        ...totals,
-        completionRate: Math.round(completionRate * 100) / 100,
-      },
+      totals: { ...totals, completionRate: Math.round(completionRate * 100) / 100 },
       locations: locationStats,
     };
   }
@@ -345,21 +221,17 @@ export class OwnerService {
    * Get top performing locations
    */
   async getTopPerformingLocations(ownerId: number, date?: string, limit: number = 5) {
-    const targetDate = date || new Date().toISOString().split('T')[0];
+    const validOwnerId = this.validateId(ownerId, 'Owner ID');
+    const targetDate = this.getQueryDate(date);
     
-    // Get owner's locations
-    const locations = await this.locationRepository.findByOwnerId(ownerId);
-    const locationIds = locations.map(l => l.id);
+    const locations = await this.locationRepository.findByOwnerId(validOwnerId);
+    const locationIds = new Set(locations.map(l => l.id));
     
-    // Get performance data
     const allPerformance = await this.summaryRepository.getTopPerformingLocations(targetDate, 50);
     
-    // Filter to owner's locations only
-    const ownerPerformance = allPerformance.filter(perf => 
-      locationIds.includes(perf.location_id)
-    ).slice(0, limit);
-
-    return ownerPerformance;
+    return allPerformance
+      .filter(perf => locationIds.has(perf.location_id))
+      .slice(0, limit);
   }
 
   /**
@@ -371,32 +243,14 @@ export class OwnerService {
     startDate: string,
     endDate: string
   ) {
-    const transaction = await sequelize.transaction();
+    const analytics = await this.getLocationAnalytics(ownerId, locationId, startDate, endDate);
     
-    try {
-      // Verify ownership
-      const location = await this.locationRepository.findById(locationId, transaction);
-      if (!location || location.owner_id !== ownerId) {
-        throw new Error('Location not found or access denied');
-      }
-
-      // Get analytics data
-      const analytics = await this.getLocationAnalytics(ownerId, locationId, startDate, endDate);
-      
-      // Get additional metadata
-      const report = {
-        ...analytics,
-        generatedAt: new Date(),
-        generatedBy: ownerId,
-        reportType: 'location_performance',
-      };
-
-      await transaction.commit();
-      return report;
-    } catch (error) {
-      await transaction.rollback();
-      throw error;
-    }
+    return {
+      ...analytics,
+      generatedAt: new Date(),
+      generatedBy: ownerId,
+      reportType: 'location_performance',
+    };
   }
 
   /**
@@ -409,39 +263,32 @@ export class OwnerService {
     page: number = 1,
     limit: number = 20
   ) {
-    const offset = (page - 1) * limit;
-    return this.locationRepository.search(query, offset, limit);
+    const { offset, limit: validLimit } = this.parsePagination(page, limit);
+    return this.locationRepository.search(query, offset, validLimit);
   }
 
   /**
    * Find locations near coordinates
    */
-  async findNearbyLocations(
-    lat: number,
-    lng: number,
-    radiusKm: number = 10
-  ): Promise<ServiceLocation[]> {
+  async findNearbyLocations(lat: number, lng: number, radiusKm: number = 10): Promise<ServiceLocation[]> {
     return this.locationRepository.findNearby(lat, lng, radiusKm);
   }
 
-  // ========== COUNTER MANAGEMENT ==========
+  // ============================================
+  // Counter Management
+  // ============================================
 
   /**
    * Get all counters for a location (owner-only)
    */
   async getLocationCounters(ownerId: number, locationId: number): Promise<Counter[]> {
-    // Verify ownership
-    const location = await this.locationRepository.findByIdSimple(locationId);
+    const validOwnerId = this.validateId(ownerId, 'Owner ID');
+    const validLocationId = this.validateId(locationId, 'Location ID');
+
+    const location = await this.getLocationOrThrow(validLocationId);
+    this.ensureOwnership(location, validOwnerId);
     
-    if (!location) {
-      throw new Error('Location not found');
-    }
-    
-    if (location.owner_id !== ownerId) {
-      throw new Error('Access denied');
-    }
-    
-    return this.locationRepository.getCountersByLocationId(locationId);
+    return this.locationRepository.getCountersByLocationId(validLocationId);
   }
 
   /**
@@ -452,38 +299,24 @@ export class OwnerService {
     locationId: number,
     counterData: CreateCounterRequest
   ): Promise<Counter> {
-    const transaction = await sequelize.transaction();
-    
-    try {
-      // Verify ownership
-      const location = await this.locationRepository.findByIdSimple(locationId, transaction);
-      
-      if (!location) {
-        throw new Error('Location not found');
-      }
-      
-      if (location.owner_id !== ownerId) {
-        throw new Error('Access denied');
-      }
+    const validOwnerId = this.validateId(ownerId, 'Owner ID');
+    const validLocationId = this.validateId(locationId, 'Location ID');
 
-      // Create counter
-      const counter = await Counter.create({
-        location_id: locationId,
+    return this.withTransaction(async (t) => {
+      const location = await this.getLocationOrThrow(validLocationId, t);
+      this.ensureOwnership(location, validOwnerId);
+
+      return Counter.create({
+        location_id: validLocationId,
         name: counterData.name,
         description: counterData.description,
-        prefix: counterData.prefix,
+        prefix: counterData.prefix?.toUpperCase() || 'A',
         open_time: counterData.openTime || '08:00:00',
         close_time: counterData.closeTime || '17:00:00',
         capacity_per_day: counterData.capacityPerDay || 100,
         is_active: true,
-      }, { transaction });
-
-      await transaction.commit();
-      return counter;
-    } catch (error) {
-      await transaction.rollback();
-      throw error;
-    }
+      }, { transaction: t });
+    });
   }
 
   /**
@@ -494,86 +327,54 @@ export class OwnerService {
     counterId: number,
     updates: UpdateCounterRequest
   ): Promise<Counter> {
-    const transaction = await sequelize.transaction();
-    
-    try {
-      const counter = await Counter.findByPk(counterId, { transaction });
-      
-      if (!counter) {
-        throw new Error('Counter not found');
-      }
-      
-      // Verify ownership via location
-      const location = await this.locationRepository.findByIdSimple(counter.location_id, transaction);
-      
-      if (!location || location.owner_id !== ownerId) {
-        throw new Error('Access denied');
-      }
+    const validOwnerId = this.validateId(ownerId, 'Owner ID');
+    const validCounterId = this.validateId(counterId, 'Counter ID');
 
-      // Build update data
-      const updateData: any = {};
-      if (updates.name) updateData.name = updates.name;
-      if (updates.description !== undefined) updateData.description = updates.description;
-      if (updates.prefix) updateData.prefix = updates.prefix;
-      if (updates.openTime) updateData.open_time = updates.openTime;
-      if (updates.closeTime) updateData.close_time = updates.closeTime;
-      if (updates.capacityPerDay !== undefined) updateData.capacity_per_day = updates.capacityPerDay;
-      if (updates.isActive !== undefined) updateData.is_active = updates.isActive;
-
-      await counter.update(updateData, { transaction });
+    return this.withTransaction(async (t) => {
+      const counter = await Counter.findByPk(validCounterId, { transaction: t });
+      if (!counter) throw new NotFoundError('Loket');
       
-      await transaction.commit();
+      const location = await this.getLocationOrThrow(counter.location_id, t);
+      this.ensureOwnership(location, validOwnerId);
+
+      const updateData = this.buildCounterUpdateData(updates);
+      await counter.update(updateData, { transaction: t });
+      
       return counter;
-    } catch (error) {
-      await transaction.rollback();
-      throw error;
-    }
+    });
   }
 
   /**
    * Delete a counter (owner-only)
    */
   async deleteCounter(ownerId: number, counterId: number): Promise<void> {
-    const transaction = await sequelize.transaction();
-    
-    try {
-      const counter = await Counter.findByPk(counterId, { transaction });
-      
-      if (!counter) {
-        throw new Error('Counter not found');
-      }
-      
-      // Verify ownership via location
-      const location = await this.locationRepository.findByIdSimple(counter.location_id, transaction);
-      
-      if (!location || location.owner_id !== ownerId) {
-        throw new Error('Access denied');
-      }
+    const validOwnerId = this.validateId(ownerId, 'Owner ID');
+    const validCounterId = this.validateId(counterId, 'Counter ID');
 
-      await counter.destroy({ transaction });
+    return this.withTransaction(async (t) => {
+      const counter = await Counter.findByPk(validCounterId, { transaction: t });
+      if (!counter) throw new NotFoundError('Loket');
       
-      await transaction.commit();
-    } catch (error) {
-      await transaction.rollback();
-      throw error;
-    }
+      const location = await this.getLocationOrThrow(counter.location_id, t);
+      this.ensureOwnership(location, validOwnerId);
+
+      await counter.destroy({ transaction: t });
+    });
   }
 
-  // ========== STAFF MANAGEMENT ==========
+  // ============================================
+  // Staff Management
+  // ============================================
 
   /**
    * Get all staff across owner's locations
    */
   async getAllStaffForOwner(ownerId: number): Promise<any[]> {
-    // Get all locations owned by this owner
-    const locations = await this.locationRepository.findByOwnerId(ownerId);
-    const locationIds = locations.map(loc => loc.id);
+    const validOwnerId = this.validateId(ownerId, 'Owner ID');
+    const locations = await this.locationRepository.findByOwnerId(validOwnerId);
     
-    if (locationIds.length === 0) {
-      return [];
-    }
+    if (locations.length === 0) return [];
 
-    // Get all members for these locations
     const staffMap = new Map<number, any>();
     
     for (const location of locations) {
@@ -584,13 +385,8 @@ export class OwnerService {
         if (!user) continue;
         
         if (staffMap.has(user.id)) {
-          // Add location to existing staff
-          staffMap.get(user.id).locations.push({
-            id: location.id,
-            name: location.name
-          });
+          staffMap.get(user.id).locations.push({ id: location.id, name: location.name });
         } else {
-          // Create new staff entry
           staffMap.set(user.id, {
             id: user.id,
             name: user.name,
@@ -599,10 +395,7 @@ export class OwnerService {
             role: member.role,
             is_active: member.is_active,
             created_at: member.created_at,
-            locations: [{
-              id: location.id,
-              name: location.name
-            }]
+            locations: [{ id: location.id, name: location.name }]
           });
         }
       }
@@ -614,59 +407,41 @@ export class OwnerService {
   /**
    * Invite/create a new staff member
    */
-  async inviteStaff(
-    ownerId: number,
-    data: InviteStaffRequest
-  ): Promise<any> {
-    const transaction = await sequelize.transaction();
-    
-    try {
-      // Verify owner owns this location
-      const location = await this.locationRepository.findByIdSimple(data.locationId, transaction);
-      
-      if (!location) {
-        throw new Error('Location not found');
-      }
-      
-      if (location.owner_id !== ownerId) {
-        throw new Error('Access denied');
-      }
+  async inviteStaff(ownerId: number, data: InviteStaffRequest): Promise<any> {
+    const validOwnerId = this.validateId(ownerId, 'Owner ID');
+    const validLocationId = this.validateId(data.locationId, 'Location ID');
 
-      // Check if user exists by email
-      let user = await this.userRepository.findByEmail(data.email, transaction);
+    return this.withTransaction(async (t) => {
+      const location = await this.getLocationOrThrow(validLocationId, t);
+      this.ensureOwnership(location, validOwnerId);
+
+      let user = await this.userRepository.findByEmail(data.email, t);
       
       if (!user) {
-        // Create new user
         const passwordHash = await bcrypt.hash(data.password || 'waitless123', 10);
         user = await this.userRepository.create({
           email: data.email,
           name: data.name,
           password_hash: passwordHash,
           role: Role.ADMIN,
-        }, transaction);
+        }, t);
       }
 
-      // Check if already member of this location
       const existingMember = await this.memberRepository.findByLocationAndUser(
-        data.locationId,
-        user.id,
-        transaction
+        validLocationId, user.id, t
       );
       
       if (existingMember) {
-        throw new Error('User is already a member of this location');
+        throw new ConflictError('User sudah menjadi member cabang ini');
       }
 
-      // Create location membership
       const member = await this.memberRepository.create({
-        location_id: data.locationId,
+        location_id: validLocationId,
         user_id: user.id,
         role: data.role === 'ADMIN' ? Role.ADMIN : Role.VISITOR,
         is_active: true,
-      }, transaction);
+      }, t);
 
-      await transaction.commit();
-      
       return {
         id: user.id,
         name: user.name,
@@ -674,167 +449,193 @@ export class OwnerService {
         role: member.role,
         is_active: member.is_active,
         created_at: member.created_at,
-        locations: [{
-          id: location.id,
-          name: location.name
-        }]
+        locations: [{ id: location.id, name: location.name }]
       };
-    } catch (error) {
-      await transaction.rollback();
-      throw error;
-    }
+    });
   }
 
   /**
    * Update staff member details
    */
-  async updateStaff(
-    ownerId: number,
-    staffId: number,
-    data: UpdateStaffRequest
-  ): Promise<any> {
-    const transaction = await sequelize.transaction();
-    
-    try {
-      // Get user
-      const user = await this.userRepository.findById(staffId, transaction);
-      
-      if (!user) {
-        throw new Error('Staff not found');
-      }
+  async updateStaff(ownerId: number, staffId: number, data: UpdateStaffRequest): Promise<any> {
+    const validOwnerId = this.validateId(ownerId, 'Owner ID');
+    const validStaffId = this.validateId(staffId, 'Staff ID');
 
-      // Verify this staff is a member of one of owner's locations
-      const ownerLocations = await this.locationRepository.findByOwnerId(ownerId, transaction);
-      const ownerLocationIds = ownerLocations.map(l => l.id);
+    return this.withTransaction(async (t) => {
+      const user = await this.userRepository.findById(validStaffId, t);
+      if (!user) throw new NotFoundError('Staf');
+
+      const { ownerLocationIds, relevantMemberships } = await this.getOwnerStaffMemberships(
+        validOwnerId, validStaffId, t
+      );
       
-      const memberships = await this.memberRepository.findByUserId(staffId, transaction);
-      const relevantMemberships = memberships.filter(m => ownerLocationIds.includes(m.location_id));
-      
-      if (relevantMemberships.length === 0) {
-        throw new Error('Access denied');
-      }
+      if (relevantMemberships.length === 0) throw new ForbiddenError();
 
       // Update user name if provided
       if (data.name) {
-        await this.userRepository.update(staffId, { name: data.name }, transaction);
+        await this.userRepository.update(validStaffId, { name: data.name }, t);
       }
 
-      // Update locationId (branch) if provided - this changes which location the staff belongs to
+      // Update location if provided
       if (data.locationId) {
-        // Verify new location is owned by this owner
         if (!ownerLocationIds.includes(data.locationId)) {
-          throw new Error('Invalid location: You can only assign staff to your own locations');
+          throw new BusinessLogicError('Lokasi tidak valid: Hanya dapat assign staf ke cabang milik Anda');
         }
-        
-        // Update the location_id in the membership record
-        // For simplicity, update the first relevant membership to the new location
         const currentMembership = relevantMemberships[0];
         if (currentMembership.location_id !== data.locationId) {
-          await this.memberRepository.update(
-            currentMembership.id, 
-            { location_id: data.locationId }, 
-            transaction
-          );
+          await this.memberRepository.update(currentMembership.id, { location_id: data.locationId }, t);
         }
       }
 
-      // Update role in location_members if provided
+      // Update role if provided
       if (data.role) {
         const newRole = data.role === 'ADMIN' ? Role.ADMIN : Role.VISITOR;
-        // Get fresh memberships after potential location update
-        const updatedMemberships = await this.memberRepository.findByUserId(staffId, transaction);
-        for (const membership of updatedMemberships) {
-          if (ownerLocationIds.includes(membership.location_id)) {
-            await this.memberRepository.update(membership.id, { role: newRole }, transaction);
-          }
+        for (const m of relevantMemberships) {
+          await this.memberRepository.update(m.id, { role: newRole }, t);
         }
       }
 
-      // Update is_active in location_members if provided
+      // Update is_active if provided
       if (data.is_active !== undefined) {
-        const updatedMemberships = await this.memberRepository.findByUserId(staffId, transaction);
-        for (const membership of updatedMemberships) {
-          if (ownerLocationIds.includes(membership.location_id)) {
-            await this.memberRepository.update(membership.id, { is_active: data.is_active }, transaction);
-          }
+        for (const m of relevantMemberships) {
+          await this.memberRepository.update(m.id, { is_active: data.is_active }, t);
         }
       }
 
-      await transaction.commit();
-      
-      // Return updated staff
-      const updatedStaff = await this.getAllStaffForOwner(ownerId);
-      return updatedStaff.find(s => s.id === staffId);
-    } catch (error) {
-      await transaction.rollback();
-      throw error;
-    }
+      const updatedStaff = await this.getAllStaffForOwner(validOwnerId);
+      return updatedStaff.find(s => s.id === validStaffId);
+    });
   }
 
   /**
    * Toggle staff active status
    */
   async toggleStaffStatus(ownerId: number, staffId: number): Promise<any> {
-    const transaction = await sequelize.transaction();
-    
-    try {
-      // Verify owner has access to this staff
-      const ownerLocations = await this.locationRepository.findByOwnerId(ownerId, transaction);
-      const ownerLocationIds = ownerLocations.map(l => l.id);
+    const validOwnerId = this.validateId(ownerId, 'Owner ID');
+    const validStaffId = this.validateId(staffId, 'Staff ID');
+
+    return this.withTransaction(async (t) => {
+      const { relevantMemberships } = await this.getOwnerStaffMemberships(validOwnerId, validStaffId, t);
       
-      const memberships = await this.memberRepository.findByUserId(staffId, transaction);
-      const relevantMemberships = memberships.filter(m => ownerLocationIds.includes(m.location_id));
+      if (relevantMemberships.length === 0) throw new ForbiddenError();
+
+      const newStatus = !relevantMemberships[0].is_active;
       
-      if (relevantMemberships.length === 0) {
-        throw new Error('Access denied');
+      for (const m of relevantMemberships) {
+        await this.memberRepository.update(m.id, { is_active: newStatus }, t);
       }
 
-      // Toggle status for all relevant memberships
-      const currentStatus = relevantMemberships[0].is_active;
-      const newStatus = !currentStatus;
-      
-      for (const membership of relevantMemberships) {
-        await this.memberRepository.update(membership.id, { is_active: newStatus }, transaction);
-      }
-
-      await transaction.commit();
-      
-      // Return updated staff
-      const updatedStaff = await this.getAllStaffForOwner(ownerId);
-      return updatedStaff.find(s => s.id === staffId) || { id: staffId, is_active: newStatus };
-    } catch (error) {
-      await transaction.rollback();
-      throw error;
-    }
+      const updatedStaff = await this.getAllStaffForOwner(validOwnerId);
+      return updatedStaff.find(s => s.id === validStaffId) || { id: validStaffId, is_active: newStatus };
+    });
   }
 
   /**
    * Remove staff from owner's locations
    */
   async removeStaff(ownerId: number, staffId: number): Promise<void> {
-    const transaction = await sequelize.transaction();
-    
-    try {
-      // Verify owner has access to this staff
-      const ownerLocations = await this.locationRepository.findByOwnerId(ownerId, transaction);
-      const ownerLocationIds = ownerLocations.map(l => l.id);
-      
-      const memberships = await this.memberRepository.findByUserId(staffId, transaction);
-      const relevantMemberships = memberships.filter(m => ownerLocationIds.includes(m.location_id));
-      
-      if (relevantMemberships.length === 0) {
-        throw new Error('Access denied');
-      }
+    const validOwnerId = this.validateId(ownerId, 'Owner ID');
+    const validStaffId = this.validateId(staffId, 'Staff ID');
 
-      // Delete memberships
-      for (const membership of relevantMemberships) {
-        await this.memberRepository.delete(membership.id, transaction);
-      }
+    return this.withTransaction(async (t) => {
+      const { relevantMemberships } = await this.getOwnerStaffMemberships(validOwnerId, validStaffId, t);
+      
+      if (relevantMemberships.length === 0) throw new ForbiddenError();
 
-      await transaction.commit();
-    } catch (error) {
-      await transaction.rollback();
-      throw error;
+      for (const m of relevantMemberships) {
+        await this.memberRepository.delete(m.id, t);
+      }
+    });
+  }
+
+  // ============================================
+  // Private Helper Methods
+  // ============================================
+
+  private async getLocationOrThrow(locationId: number, t?: Transaction): Promise<ServiceLocation> {
+    const location = await this.locationRepository.findByIdSimple(locationId, t);
+    if (!location) throw new NotFoundError('Cabang');
+    return location;
+  }
+
+  private ensureOwnership(location: ServiceLocation, ownerId: number): void {
+    if (location.owner_id !== ownerId) {
+      throw new ForbiddenError('Anda hanya dapat mengelola cabang milik Anda');
     }
+  }
+
+  private async ensureIsOwner(userId: number, t?: Transaction): Promise<void> {
+    const owner = await this.userRepository.findById(userId, t);
+    if (!owner || owner.role !== Role.OWNER) {
+      throw new ForbiddenError('Hanya owner yang dapat melakukan tindakan ini');
+    }
+  }
+
+  private async ensureLocationNameUnique(
+    ownerId: number,
+    name: string,
+    excludeId?: number,
+    t?: Transaction
+  ): Promise<void> {
+    const exists = await this.locationRepository.existsForOwner(ownerId, name, t);
+    if (exists) {
+      throw new ConflictError('Nama cabang sudah ada untuk owner ini');
+    }
+  }
+
+  private buildLocationUpdateData(updates: UpdateLocationRequest): Record<string, any> {
+    const data: Record<string, any> = {};
+    if (updates.name) data.name = updates.name;
+    if (updates.address !== undefined) data.address = updates.address;
+    if (updates.city !== undefined) data.city = updates.city;
+    if (updates.lat !== undefined) data.lat = updates.lat;
+    if (updates.lng !== undefined) data.lng = updates.lng;
+    if (updates.isActive !== undefined) data.is_active = updates.isActive;
+    return data;
+  }
+
+  private buildCounterUpdateData(updates: UpdateCounterRequest): Record<string, any> {
+    const data: Record<string, any> = {};
+    if (updates.name) data.name = updates.name;
+    if (updates.description !== undefined) data.description = updates.description;
+    if (updates.prefix) data.prefix = updates.prefix.toUpperCase();
+    if (updates.openTime) data.open_time = updates.openTime;
+    if (updates.closeTime) data.close_time = updates.closeTime;
+    if (updates.capacityPerDay !== undefined) data.capacity_per_day = updates.capacityPerDay;
+    if (updates.isActive !== undefined) data.is_active = updates.isActive;
+    return data;
+  }
+
+  private async getOwnerStaffMemberships(ownerId: number, staffId: number, t?: Transaction) {
+    const ownerLocations = await this.locationRepository.findByOwnerId(ownerId, t);
+    const ownerLocationIds = ownerLocations.map(l => l.id);
+    
+    const memberships = await this.memberRepository.findByUserId(staffId, t);
+    const relevantMemberships = memberships.filter((m: any) => ownerLocationIds.includes(m.location_id));
+    
+    return { ownerLocationIds, relevantMemberships };
+  }
+
+  private getEmptySummary() {
+    return {
+      total_issued: 0,
+      total_done: 0,
+      total_hold: 0,
+      total_cancel: 0,
+      avg_service_seconds: 0,
+    };
+  }
+
+  private calculateDashboardTotals(locationStats: any[]) {
+    return locationStats.reduce(
+      (acc, stat) => ({
+        totalIssued: acc.totalIssued + stat.summary.total_issued,
+        totalDone: acc.totalDone + stat.summary.total_done,
+        totalHold: acc.totalHold + stat.summary.total_hold,
+        totalCancel: acc.totalCancel + stat.summary.total_cancel,
+        avgServiceSeconds: acc.avgServiceSeconds + stat.summary.avg_service_seconds,
+      }),
+      { totalIssued: 0, totalDone: 0, totalHold: 0, totalCancel: 0, avgServiceSeconds: 0 }
+    );
   }
 }

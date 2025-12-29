@@ -21,7 +21,7 @@ export class CounterRepository {
         {
           model: ServiceLocation,
           as: 'location',
-          attributes: ['id', 'name', 'owner_id'],
+          attributes: ['id', 'name', 'owner_id', 'is_active'],
         },
       ],
       transaction,

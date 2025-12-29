@@ -3,12 +3,12 @@
   <div class="min-h-screen bg-gray-50">
     <div class="flex h-screen">
       <!-- Enhanced Sidebar -->
-      <div class="hidden md:block">
+      <div class="hidden md:block flex-shrink-0">
         <AdminSidebar />
       </div>
 
       <!-- Main Content -->
-      <div class="flex-1 flex flex-col overflow-hidden">
+      <div class="flex-1 flex flex-col overflow-hidden min-w-0">
         <!-- Enhanced Header -->
         <AdminHeader 
           :page-title="pageTitle"
@@ -16,26 +16,36 @@
           @toggle-sidebar="toggleMobileSidebar"
         />
 
-        <!-- Page Content -->
-        <main class="flex-1 overflow-auto p-6 bg-gray-50">
-          <slot />
+        <!-- Page Content with smooth transitions -->
+        <main class="flex-1 overflow-auto bg-gray-50">
+          <Transition name="page-slide" mode="out-in">
+            <div :key="route.fullPath" class="min-h-full">
+              <slot />
+            </div>
+          </Transition>
         </main>
       </div>
     </div>
 
     <!-- Mobile Sidebar Overlay -->
-    <div
-      v-if="mobileSidebarOpen"
-      class="fixed inset-0 z-50 md:hidden"
-    >
-      <div 
-        class="absolute inset-0 bg-gray-900 opacity-50"
-        @click="toggleMobileSidebar"
-      ></div>
-      <div class="absolute left-0 top-0 h-full">
-        <AdminSidebar />
-      </div>
-    </div>
+    <Teleport to="body">
+      <Transition name="overlay-fade">
+        <div
+          v-if="mobileSidebarOpen"
+          class="fixed inset-0 z-50 md:hidden"
+        >
+          <div 
+            class="absolute inset-0 bg-gray-900/50 backdrop-blur-sm"
+            @click="toggleMobileSidebar"
+          ></div>
+          <Transition name="sidebar-slide" appear>
+            <div v-if="mobileSidebarOpen" class="absolute left-0 top-0 h-full shadow-2xl">
+              <AdminSidebar />
+            </div>
+          </Transition>
+        </div>
+      </Transition>
+    </Teleport>
   </div>
 </template>
 
@@ -49,11 +59,11 @@ const mobileSidebarOpen = ref(false)
 const pageTitle = computed(() => {
   const titles: Record<string, string> = {
     '/admin/dashboard': 'Dashboard',
-    '/admin/queue': 'Queue Management',
-    '/admin/locations': 'Location Management',
-    '/admin/users': 'User Management',
-    '/admin/reports': 'Reports & Analytics',
-    '/admin/settings': 'System Settings'
+    '/admin/queue': 'Manajemen Antrian',
+    '/admin/locations': 'Manajemen Lokasi',
+    '/admin/users': 'Manajemen Pengguna',
+    '/admin/reports': 'Laporan Harian',
+    '/admin/settings': 'Pengaturan Loket'
   }
   return titles[route.path] || 'Admin Panel'
 })
@@ -65,16 +75,16 @@ const breadcrumbs = computed(() => {
     crumbs.push({ name: 'Dashboard', to: '/admin/dashboard' })
   }
   
-  if (route.path.startsWith('/admin/queues')) {
-    crumbs.push({ name: 'Queues' })
+  if (route.path.startsWith('/admin/queue')) {
+    crumbs.push({ name: 'Antrian' })
   } else if (route.path.startsWith('/admin/locations')) {
-    crumbs.push({ name: 'Locations' })
+    crumbs.push({ name: 'Lokasi' })
   } else if (route.path.startsWith('/admin/users')) {
-    crumbs.push({ name: 'Users' })
+    crumbs.push({ name: 'Pengguna' })
   } else if (route.path.startsWith('/admin/reports')) {
-    crumbs.push({ name: 'Reports' })
+    crumbs.push({ name: 'Laporan' })
   } else if (route.path.startsWith('/admin/settings')) {
-    crumbs.push({ name: 'Settings' })
+    crumbs.push({ name: 'Pengaturan' })
   }
   
   return crumbs
@@ -92,12 +102,47 @@ watch(() => route.path, () => {
 </script>
 
 <style scoped>
-/* Custom styles for admin layout */
-.nav-link-active {
-  @apply bg-primary-50 text-primary-700 border-primary-200;
+/* Page slide transition - smooth fade + slide */
+.page-slide-enter-active {
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.nav-link {
-  @apply text-surface-600 hover:text-surface-900 hover:bg-surface-50;
+.page-slide-leave-active {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.page-slide-enter-from {
+  opacity: 0;
+  transform: translateY(12px);
+}
+
+.page-slide-leave-to {
+  opacity: 0;
+  transform: translateY(-8px);
+}
+
+/* Overlay fade transition */
+.overlay-fade-enter-active,
+.overlay-fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+
+.overlay-fade-enter-from,
+.overlay-fade-leave-to {
+  opacity: 0;
+}
+
+/* Sidebar slide transition */
+.sidebar-slide-enter-active {
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.sidebar-slide-leave-active {
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.sidebar-slide-enter-from,
+.sidebar-slide-leave-to {
+  transform: translateX(-100%);
 }
 </style>

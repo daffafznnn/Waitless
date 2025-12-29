@@ -6,6 +6,8 @@ export interface User {
   name: string
   phone?: string
   role: Role
+  google_id?: string
+  avatar_url?: string
   created_at: string
   updated_at?: string
 }

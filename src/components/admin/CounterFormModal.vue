@@ -27,18 +27,7 @@
         required
       />
 
-      <!-- Location Selection -->
-      <UiFormField
-        v-if="!isEdit"
-        label="Lokasi"
-        type="select"
-        v-model="formData.locationId"
-        placeholder="Pilih lokasi"
-        :options="locationOptions"
-        :error="formErrors.locationId"
-        width="w-full"
-        required
-      />
+
 
       <!-- Operating Hours -->
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -199,19 +188,13 @@ const formData = ref<CounterFormData>({
 });
 
 // Computed options
-const locationOptions = computed(() =>
-  props.locations.map((location) => ({
-    value: location.id,
-    label: location.name,
-  }))
-);
+
 
 // Form validation
 const isFormValid = computed(() => {
   return !!(
     formData.value.name &&
     formData.value.prefix &&
-    formData.value.locationId &&
     formData.value.openTime &&
     formData.value.closeTime &&
     formData.value.capacityPerDay &&
@@ -266,11 +249,6 @@ const validateForm = (): boolean => {
     formErrors.value.prefix = "Kode loket harus diisi";
   } else if (formData.value.prefix.length > 3) {
     formErrors.value.prefix = "Kode loket maksimal 3 karakter";
-  }
-
-  // Location validation
-  if (!formData.value.locationId && !isEdit.value) {
-    formErrors.value.locationId = "Lokasi harus dipilih";
   }
 
   // Time validation

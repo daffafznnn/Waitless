@@ -149,11 +149,31 @@ export class TicketRepository {
     limit: number = 50,
     transaction?: Transaction
   ): Promise<{ rows: Ticket[]; count: number }> {
+    // Import TicketEvent model for include
+    const { TicketEvent } = require('../models/ticket_event.model');
+    
     return Ticket.findAndCountAll({
       where: {
         location_id: locationId,
         date_for: date,
       },
+      // Explicitly include all ticket fields needed by frontend
+      attributes: [
+        'id', 
+        'location_id', 
+        'counter_id', 
+        'user_id', 
+        'date_for', 
+        'sequence', 
+        'queue_number', 
+        'status', 
+        'called_at', 
+        'started_at', 
+        'finished_at', 
+        'hold_reason',
+        'created_at', 
+        'updated_at'
+      ],
       include: [
         {
           model: Counter,
@@ -164,6 +184,19 @@ export class TicketRepository {
           model: User,
           as: 'user',
           attributes: ['id', 'name', 'phone'],
+        },
+        {
+          model: TicketEvent,
+          as: 'events',
+          attributes: ['id', 'event_type', 'actor_id', 'note', 'created_at'],
+          include: [
+            {
+              model: User,
+              as: 'actor',
+              attributes: ['id', 'name'],
+            }
+          ],
+          order: [['created_at', 'ASC']],
         },
       ],
       order: [['created_at', 'ASC']],

@@ -18,13 +18,16 @@ export default defineNuxtPlugin(async () => {
     
     if (loaded && authStore.user && authStore.isAuthenticated) {
       console.log('Auth state restored from localStorage:', authStore.user.email)
+      authStore.setInitialized(true)
       
-      // Verify the state by checking with server
+      // Optionally verify with server in background, but don't clear if fails
+      // This allows offline-first behavior
       try {
         await initializeAuth()
       } catch (error) {
-        console.warn('Failed to verify auth with server, clearing local state:', error)
-        authStore.clearAuth()
+        // Server verification failed but we still have valid localStorage data
+        // Keep the local state - user is still "logged in" for UI purposes
+        console.warn('Server verification failed, keeping local auth state:', error)
       }
     } else {
       console.log('No valid auth state in localStorage, checking server...')
@@ -33,6 +36,10 @@ export default defineNuxtPlugin(async () => {
     }
   } catch (error) {
     console.warn('Failed to initialize auth on app start:', error)
-    authStore.clearAuth()
+    // Only clear if there was no localStorage state to begin with
+    if (!authStore.user) {
+      authStore.clearAuth()
+    }
+    authStore.setInitialized(true)
   }
 })

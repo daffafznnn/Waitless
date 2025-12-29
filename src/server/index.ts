@@ -5,6 +5,7 @@ import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
 import { connectDatabase } from './db';
 import { JobScheduler } from './jobs/JobScheduler';
+import { initializeQueueWorker, shutdownQueueWorker, getQueueStats } from './jobs/QueueWorker';
 import { authRoutes } from './routes/auth.routes';
 import { queueRoutes } from './routes/queue.routes';
 import { adminRoutes } from './routes/admin.routes';
@@ -16,9 +17,15 @@ dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3002;
+const HOST = process.env.HOST || '0.0.0.0'; // Listen on all interfaces for LAN access
+
+// Dynamic CORS for development (allows LAN access)
+const corsOrigins = process.env.NODE_ENV === 'development'
+  ? true // Allow any origin in development for LAN testing
+  : (process.env.CLIENT_URL || 'http://localhost:3000');
 
 app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:3000',
+  origin: corsOrigins,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
@@ -50,6 +57,7 @@ app.get('/api/status', async (_req, res) => {
     const jobScheduler = JobScheduler.getInstance();
     const jobStatus = jobScheduler.getJobStatus();
     const lastDailySummaryRun = jobScheduler.getLastDailySummaryRun();
+    const queueStats = getQueueStats();
     
     res.json({
       ok: true,
@@ -58,6 +66,7 @@ app.get('/api/status', async (_req, res) => {
         database: 'connected',
         jobs: jobStatus,
         lastDailySummaryRun,
+        queueStats,
       },
     });
   } catch (error) {
@@ -100,17 +109,30 @@ async function startServer(): Promise<void> {
     jobScheduler.startAllJobs();
     console.log('✅ Job scheduler started');
 
-    const server = app.listen(PORT, () => {
-      console.log(`🚀 Waitless API Server running on port ${PORT}`);
+    console.log('⚙️ Initializing job queue worker...');
+    initializeQueueWorker();
+    console.log('✅ Job queue worker started');
+
+    const server = app.listen(Number(PORT), HOST, () => {
+      console.log(`🚀 Waitless API Server running on ${HOST}:${PORT}`);
       console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
       console.log(`📖 Health check: http://localhost:${PORT}/health`);
       console.log(`📊 Status endpoint: http://localhost:${PORT}/api/status`);
+      
+      // Show network URL for LAN access
+      if (HOST === '0.0.0.0') {
+        console.log(`🌐 Network: Access from other devices using your local IP (e.g., http://192.168.x.x:${PORT})`);
+      }
     });
 
-    const gracefulShutdown = (signal: string) => {
+    const gracefulShutdown = async (signal: string) => {
       console.log(`\n⚡ Received ${signal}. Starting graceful shutdown...`);
       
+      // Stop job scheduler
       jobScheduler.stopAllJobs();
+      
+      // Shutdown queue worker gracefully
+      await shutdownQueueWorker(5000);
       
       server.close(() => {
         console.log('✅ HTTP server closed');

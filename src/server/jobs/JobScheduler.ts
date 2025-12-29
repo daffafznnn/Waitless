@@ -1,10 +1,17 @@
 /* FILE: src/server/jobs/JobScheduler.ts */
 import { DailySummaryJob } from './DailySummaryJob';
+import { 
+  getJakartaHour, 
+  getJakartaMinute, 
+  getJakartaDayOfWeek,
+  getJakartaDateString 
+} from '../utils/datetime';
 
 export class JobScheduler {
   private static instance: JobScheduler;
   private jobs: Map<string, NodeJS.Timeout> = new Map();
   private lastDailySummaryRun: Date | null = null;
+  private lastDailySummaryDate: string | null = null;
 
   private constructor() {}
 
@@ -23,21 +30,20 @@ export class JobScheduler {
 
   private scheduleDailySummaryJob(): void {
     const checkInterval = setInterval(async () => {
-      const now = new Date();
-      const jakartaTime = new Date(now.getTime() + (7 * 60 * 60 * 1000)); // UTC+7 for Jakarta
-      const hour = jakartaTime.getHours();
-      const minute = jakartaTime.getMinutes();
+      const hour = getJakartaHour();
+      const minute = getJakartaMinute();
 
       // Run at 1:00 AM Jakarta time
       if (hour === 1 && minute === 0) {
-        const today = jakartaTime.toISOString().split('T')[0];
-        const lastRunDate = this.lastDailySummaryRun?.toISOString().split('T')[0];
+        const today = getJakartaDateString();
 
-        if (lastRunDate !== today) {
+        // Prevent running multiple times on same day
+        if (this.lastDailySummaryDate !== today) {
           console.log('Running daily summary job...');
           try {
             await DailySummaryJob.runDailyJob();
             this.lastDailySummaryRun = new Date();
+            this.lastDailySummaryDate = today;
             console.log('Daily summary job completed successfully');
           } catch (error) {
             console.error('Daily summary job failed:', error);
@@ -52,11 +58,9 @@ export class JobScheduler {
 
   private scheduleCleanupJob(): void {
     const checkInterval = setInterval(async () => {
-      const now = new Date();
-      const jakartaTime = new Date(now.getTime() + (7 * 60 * 60 * 1000));
-      const hour = jakartaTime.getHours();
-      const minute = jakartaTime.getMinutes();
-      const dayOfWeek = jakartaTime.getDay(); // 0 = Sunday
+      const hour = getJakartaHour();
+      const minute = getJakartaMinute();
+      const dayOfWeek = getJakartaDayOfWeek(); // 0 = Sunday
 
       // Run at 2:00 AM every Sunday
       if (dayOfWeek === 0 && hour === 2 && minute === 0) {

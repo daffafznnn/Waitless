@@ -2,6 +2,9 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
+// Jakarta timezone offset
+const JAKARTA_TIMEZONE = '+07:00';
+
 interface DatabaseConfig {
   username: string;
   password: string;
@@ -44,7 +47,7 @@ const config: Config = {
     dialect: 'mysql',
     dialectOptions: {
       charset: 'utf8mb4',
-      timezone: '+00:00',
+      timezone: JAKARTA_TIMEZONE,
       dateStrings: true,
       typeCast: true,
     },
@@ -55,7 +58,7 @@ const config: Config = {
       idle: parseInt(process.env.DB_POOL_IDLE || '10000'),
     },
     logging: false,
-    timezone: '+00:00',
+    timezone: JAKARTA_TIMEZONE,
   },
   test: {
     username: process.env.MYSQL_ADDON_USER || 'root',
@@ -66,12 +69,12 @@ const config: Config = {
     dialect: 'mysql',
     dialectOptions: {
       charset: 'utf8mb4',
-      timezone: '+00:00',
+      timezone: JAKARTA_TIMEZONE,
       dateStrings: true,
       typeCast: true,
     },
     logging: false,
-    timezone: '+00:00',
+    timezone: JAKARTA_TIMEZONE,
   },
   production: {
     username: process.env.MYSQL_ADDON_USER || 'root',
@@ -82,7 +85,7 @@ const config: Config = {
     dialect: 'mysql',
     dialectOptions: {
       charset: 'utf8mb4',
-      timezone: '+00:00',
+      timezone: JAKARTA_TIMEZONE,
       dateStrings: true,
       typeCast: true,
       ssl: {
@@ -96,7 +99,7 @@ const config: Config = {
       idle: parseInt(process.env.DB_POOL_IDLE || '10000'),
     },
     logging: false,
-    timezone: '+00:00',
+    timezone: JAKARTA_TIMEZONE,
   },
 };
 

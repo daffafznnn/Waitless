@@ -5,7 +5,8 @@ export default defineNuxtConfig({
   srcDir: 'src/',
   
   devServer: {
-    port: 3000
+    port: 3000,
+    host: '0.0.0.0' // Enable LAN access
   },
 
   // Modules
@@ -22,6 +23,10 @@ export default defineNuxtConfig({
   runtimeConfig: {
     // Private keys (only available on server-side)
     jwtSecret: process.env.JWT_SECRET || 'your-jwt-secret',
+    
+    // Backend host for LAN access (set via environment or auto-detect)
+    backendHost: process.env.BACKEND_HOST || '0.0.0.0',
+    backendPort: process.env.BACKEND_PORT || '3002',
     
     // Public keys (exposed to client-side)
     public: {
@@ -52,15 +57,44 @@ export default defineNuxtConfig({
   app: {
     head: {
       title: 'Waitless - Queue Management System',
+      htmlAttrs: {
+        lang: 'id'
+      },
       meta: [
         { charset: 'utf-8' },
         { name: 'viewport', content: 'width=device-width, initial-scale=1' },
         { name: 'description', content: 'Modern queue management system for businesses' }
       ],
       link: [
-        { rel: 'icon', type: 'image/x-icon', href: '/favicon.ico' }
+        { rel: 'icon', type: 'image/x-icon', href: '/favicon.ico' },
+        // Preconnect to Google for faster avatar loading
+        { rel: 'preconnect', href: 'https://lh3.googleusercontent.com' },
+        { rel: 'preconnect', href: 'https://api.dicebear.com' }
+      ],
+      // Inline CSS to prevent flash of unstyled content
+      style: [
+        {
+          innerHTML: `
+            html:not(.hydrated) body { opacity: 0; }
+            html.hydrated body { opacity: 1; transition: opacity 0.15s ease-in-out; }
+          `
+        }
+      ],
+      // Script to mark as hydrated when ready
+      script: [
+        {
+          innerHTML: `
+            window.addEventListener('load', function() {
+              setTimeout(function() {
+                document.documentElement.classList.add('hydrated');
+              }, 50);
+            });
+          `
+        }
       ]
-    }
+    },
+    // Page transition for smoother navigation
+    pageTransition: { name: 'page', mode: 'out-in' }
   },
 
   // Route Rules for SSR/SPA

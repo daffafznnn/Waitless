@@ -14,6 +14,8 @@ export interface UserAttributes {
   name: string;
   phone?: string;
   role: Role;
+  google_id?: string;
+  avatar_url?: string;
   created_at: Date;
   updated_at: Date;
   deleted_at?: Date;
@@ -28,6 +30,8 @@ export class User extends Model<UserAttributes, UserCreationAttributes> implemen
   declare name: string;
   declare phone?: string;
   declare role: Role;
+  declare google_id?: string;
+  declare avatar_url?: string;
   
   declare readonly created_at: Date;
   declare readonly updated_at: Date;
@@ -82,6 +86,15 @@ export const initUserModel = (sequelize: Sequelize): typeof User => {
       },
       phone: {
         type: DataTypes.STRING(32),
+        allowNull: true,
+      },
+      google_id: {
+        type: DataTypes.STRING(191),
+        allowNull: true,
+        unique: true,
+      },
+      avatar_url: {
+        type: DataTypes.STRING(500),
         allowNull: true,
       },
       role: {

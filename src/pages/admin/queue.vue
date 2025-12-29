@@ -4,6 +4,34 @@
     href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
   />
   <div class="flex flex-col gap-6 p-6 max-md:p-4 max-sm:p-3">
+    <!-- Access Error Alert -->
+    <div 
+      v-if="accessError" 
+      class="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3"
+    >
+      <svg class="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+      </svg>
+      <div>
+        <h3 class="text-sm font-medium text-red-800">Akses Ditolak</h3>
+        <p class="text-sm text-red-600 mt-1">{{ accessError }}</p>
+      </div>
+    </div>
+
+    <!-- Location Info Header -->
+    <div 
+      v-if="assignedLocation" 
+      class="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-center gap-2"
+    >
+      <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+      </svg>
+      <span class="text-sm font-medium text-blue-800">
+        Cabang: {{ assignedLocation.name }}
+      </span>
+    </div>
+
     <!-- Filter Section -->
     <AdminFilterSection title="Filter Antrian" @reset="resetFilters">
       <!-- Loket Filter -->
@@ -193,14 +221,15 @@ definePageMeta({
 })
 
 const queueStore = useQueueStore()
+const adminStore = useAdminStore()
+const toast = useToast()
 
-// Get user's location - assuming admin users have a default location
-// This should be adapted based on your user-location relationship
-const currentLocationId = computed(() => {
-  // For now, we'll use a default location ID of 1
-  // In a real app, this should come from user's assigned location or be selectable
-  return 1
-})
+// Track admin's assigned location
+const assignedLocation = ref<{ id: number; name: string } | null>(null)
+const accessError = ref<string | null>(null)
+
+// Get current location from assigned location
+const currentLocationId = computed(() => assignedLocation.value?.id || null)
 
 // Watch for store loading states
 watch(() => queueStore.isLoading, (loading: boolean) => {
@@ -361,10 +390,35 @@ const getCounterName = (counterId: number) => {
 }
 
 const getServedByName = (ticket: Ticket) => {
-  // Since the ticket might not have served_by relation loaded,
-  // we'll display a placeholder for now
-  // In a real app, you might want to load this data separately
-  return ticket.events?.find((e: any) => e.event_type === 'CALLED')?.actor?.name || '-'
+  // First check if ticket has events array
+  if (!ticket.events || !Array.isArray(ticket.events) || ticket.events.length === 0) {
+    // If no events, check ticket status - only show '-' for relevant statuses
+    if (ticket.status === 'WAITING') {
+      return 'Belum dipanggil'
+    }
+    return '-'
+  }
+  
+  // Find the CALLED event which has the caller (actor) info
+  // Look for events in order: CALLED, RESUMED, or most recent with actor
+  const calledEvent = ticket.events.find((e: any) => e.event_type === 'CALLED' && e.actor)
+  if (calledEvent?.actor?.name) {
+    return calledEvent.actor.name
+  }
+  
+  // Try RESUMED event (if ticket was re-called)
+  const resumedEvent = ticket.events.find((e: any) => e.event_type === 'RESUMED' && e.actor)
+  if (resumedEvent?.actor?.name) {
+    return resumedEvent.actor.name
+  }
+  
+  // Fallback: find any event with actor
+  const anyEventWithActor = ticket.events.find((e: any) => e.actor?.name)
+  if (anyEventWithActor?.actor?.name) {
+    return anyEventWithActor.actor.name
+  }
+  
+  return '-'
 }
 
 const formatTime = (dateString: string) => {
@@ -404,25 +458,100 @@ const resetFilters = () => {
   pagination.page = 1
 }
 
+/**
+ * Load admin's assigned location first, then load data
+ */
+const loadAdminLocation = async () => {
+  try {
+    accessError.value = null
+    
+    // Fetch accessible counters - this will only return counters from assigned location
+    const accessibleCounters = await adminStore.fetchAllAccessibleCounters()
+    
+    if (accessibleCounters && accessibleCounters.length > 0) {
+      // Get location from first counter (all should be from same location for admin)
+      const firstCounter = accessibleCounters[0]
+      if (firstCounter.location_id) {
+        // Fetch location details
+        const locationApi = useLocationApi()
+        const response = await locationApi.getLocationById(firstCounter.location_id)
+        if (response.ok && response.data?.location) {
+          assignedLocation.value = {
+            id: response.data.location.id,
+            name: response.data.location.name
+          }
+        }
+      }
+      counters.value = accessibleCounters
+    } else {
+      accessError.value = 'Anda tidak memiliki akses ke cabang manapun'
+      counters.value = []
+    }
+  } catch (error: any) {
+    console.error('Failed to load admin location:', error)
+    
+    // Check for 403 Forbidden
+    if (error.message?.includes('403') || error.message?.includes('akses')) {
+      accessError.value = 'Akses Anda ke cabang ini telah dinonaktifkan'
+    } else {
+      accessError.value = error.message || 'Gagal memuat data cabang'
+    }
+    
+    counters.value = []
+  }
+}
+
 const refreshData = async () => {
   refreshing.value = true
   try {
-    await loadTickets()
-    await loadCounters()
+    // First ensure we have the admin's assigned location
+    if (!assignedLocation.value) {
+      await loadAdminLocation()
+    }
+    
+    // Only load tickets if we have access to a location
+    if (currentLocationId.value) {
+      await loadTickets()
+      await loadCounters()
+    }
+  } catch (error: any) {
+    console.error('Refresh failed:', error)
+    
+    // Handle 403 errors
+    if (error.message?.includes('403') || error.message?.includes('akses')) {
+      accessError.value = error.message
+      toast.add({
+        title: 'Akses Ditolak',
+        description: error.message || 'Anda tidak memiliki akses ke cabang ini',
+        color: 'red'
+      })
+    }
   } finally {
     refreshing.value = false
   }
 }
 
 const loadTickets = async () => {
+  if (!currentLocationId.value) {
+    tickets.value = []
+    return
+  }
+  
   ticketsLoading.value = true
   try {
     const response = await queueStore.fetchTodayTickets(currentLocationId.value, {
       date: filters.date
     })
     tickets.value = response.tickets || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('Failed to load tickets:', error)
+    
+    // Handle 403 errors
+    if (error.message?.includes('403') || error.message?.includes('akses')) {
+      accessError.value = 'Akses Anda ke cabang ini telah dinonaktifkan'
+      assignedLocation.value = null
+    }
+    
     tickets.value = []
   } finally {
     ticketsLoading.value = false
@@ -430,21 +559,45 @@ const loadTickets = async () => {
 }
 
 const loadCounters = async () => {
+  if (!currentLocationId.value) return
+  
   try {
-    // Using the location API to get counters for current location
-    const response = await $fetch<any>(`/api/locations/${currentLocationId.value}/counters`)
-    counters.value = response.data?.counters || response.counters || []
-  } catch (error) {
+    // Use admin API to get counters for assigned location
+    const response = await adminStore.fetchLocationCounters(currentLocationId.value)
+    if (response) {
+      counters.value = response
+    }
+  } catch (error: any) {
     console.error('Failed to load counters:', error)
-    counters.value = []
+    
+    // Handle 403 errors
+    if (error.message?.includes('403') || error.message?.includes('akses')) {
+      accessError.value = 'Akses ke cabang ini telah dinonaktifkan'
+    }
+    
+    // Keep existing counters if any
   }
 }
 
 const handleCallTicket = async (ticket: Ticket) => {
   const toast = useToast()
   
+  // Get counter_id from direct field or nested counter object
+  const counterId = ticket.counter_id || (ticket as any).counter?.id
+  
+  if (!counterId) {
+    console.error('Counter ID not found in ticket:', ticket)
+    toast.add({
+      title: 'Error',
+      description: 'Data loket tidak ditemukan pada tiket',
+      icon: 'i-heroicons-x-circle',
+      color: 'red'
+    })
+    return
+  }
+  
   try {
-    await queueStore.callNext({ counterId: ticket.counter_id })
+    await queueStore.callNext({ counterId: Number(counterId) })
     await refreshData()
     
     toast.add({
@@ -453,11 +606,11 @@ const handleCallTicket = async (ticket: Ticket) => {
       icon: 'i-heroicons-megaphone',
       color: 'green'
     })
-  } catch (error) {
+  } catch (error: any) {
     console.error('Failed to call ticket:', error)
     toast.add({
       title: 'Error',
-      description: 'Gagal memanggil tiket',
+      description: error?.message || 'Gagal memanggil tiket',
       icon: 'i-heroicons-x-circle',
       color: 'red'
     })
@@ -466,11 +619,35 @@ const handleCallTicket = async (ticket: Ticket) => {
 
 const handleHoldTicket = async (ticket: Ticket) => {
   const toast = useToast()
+  const { $modal } = useNuxtApp()
+  
+  // Validate ticket ID
+  if (!ticket.id) {
+    console.error('Ticket ID not found:', ticket)
+    toast.add({
+      title: 'Error',
+      description: 'ID tiket tidak ditemukan',
+      icon: 'i-heroicons-x-circle',
+      color: 'red'
+    })
+    return
+  }
   
   try {
-    // Prompt for hold reason
-    const reason = prompt('Alasan hold tiket:') || 'Admin hold'
-    await queueStore.holdTicket({ ticketId: ticket.id, reason })
+    // Prompt for hold reason using custom modal
+    const reason = await $modal.prompt({
+      title: 'Tahan Tiket',
+      message: 'Masukkan alasan menahan antrian ini:',
+      placeholder: 'Contoh: Pelanggan belum merespons panggilan',
+      confirmText: 'Tahan Antrian',
+      cancelText: 'Batal',
+      required: true
+    })
+    
+    // If user cancelled or empty input (though required handles empty), stop
+    if (!reason) return
+    
+    await queueStore.holdTicket({ ticketId: Number(ticket.id), reason })
     await refreshData()
     
     toast.add({
@@ -479,11 +656,11 @@ const handleHoldTicket = async (ticket: Ticket) => {
       icon: 'i-heroicons-pause',
       color: 'orange'
     })
-  } catch (error) {
+  } catch (error: any) {
     console.error('Failed to hold ticket:', error)
     toast.add({
       title: 'Error',
-      description: 'Gagal melakukan hold pada tiket',
+      description: error?.message || 'Gagal melakukan hold pada tiket',
       icon: 'i-heroicons-x-circle',
       color: 'red'
     })
@@ -493,8 +670,20 @@ const handleHoldTicket = async (ticket: Ticket) => {
 const handleResumeTicket = async (ticket: Ticket) => {
   const toast = useToast()
   
+  // Validate ticket ID
+  if (!ticket.id) {
+    console.error('Ticket ID not found:', ticket)
+    toast.add({
+      title: 'Error',
+      description: 'ID tiket tidak ditemukan',
+      icon: 'i-heroicons-x-circle',
+      color: 'red'
+    })
+    return
+  }
+  
   try {
-    await queueStore.resumeTicket({ ticketId: ticket.id })
+    await queueStore.resumeTicket({ ticketId: Number(ticket.id) })
     await refreshData()
     
     toast.add({
@@ -503,11 +692,11 @@ const handleResumeTicket = async (ticket: Ticket) => {
       icon: 'i-heroicons-play',
       color: 'green'
     })
-  } catch (error) {
+  } catch (error: any) {
     console.error('Failed to resume ticket:', error)
     toast.add({
       title: 'Error',
-      description: 'Gagal melanjutkan tiket',
+      description: error?.message || 'Gagal melanjutkan tiket',
       icon: 'i-heroicons-x-circle',
       color: 'red'
     })
@@ -517,8 +706,20 @@ const handleResumeTicket = async (ticket: Ticket) => {
 const handleMarkDone = async (ticket: Ticket) => {
   const toast = useToast()
   
+  // Validate ticket ID
+  if (!ticket.id) {
+    console.error('Ticket ID not found:', ticket)
+    toast.add({
+      title: 'Error',
+      description: 'ID tiket tidak ditemukan',
+      icon: 'i-heroicons-x-circle',
+      color: 'red'
+    })
+    return
+  }
+  
   try {
-    await queueStore.markDone({ ticketId: ticket.id })
+    await queueStore.markDone({ ticketId: Number(ticket.id) })
     await refreshData()
     
     toast.add({
@@ -527,11 +728,11 @@ const handleMarkDone = async (ticket: Ticket) => {
       icon: 'i-heroicons-check-circle',
       color: 'green'
     })
-  } catch (error) {
+  } catch (error: any) {
     console.error('Failed to mark ticket as done:', error)
     toast.add({
       title: 'Error',
-      description: 'Gagal menyelesaikan tiket',
+      description: error?.message || 'Gagal menyelesaikan tiket',
       icon: 'i-heroicons-x-circle',
       color: 'red'
     })

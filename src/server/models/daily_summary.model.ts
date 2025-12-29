@@ -15,14 +15,15 @@ export interface DailySummaryAttributes {
 export interface DailySummaryCreationAttributes extends Optional<DailySummaryAttributes, 'id'> {}
 
 export class DailySummary extends Model<DailySummaryAttributes, DailySummaryCreationAttributes> implements DailySummaryAttributes {
-  public id!: number;
-  public location_id!: number;
-  public date_for!: string;
-  public total_issued!: number;
-  public total_done!: number;
-  public total_hold!: number;
-  public total_cancel!: number;
-  public avg_service_seconds!: number;
+  // Use 'declare' to avoid shadowing Sequelize getters
+  declare id: number;
+  declare location_id: number;
+  declare date_for: string;
+  declare total_issued: number;
+  declare total_done: number;
+  declare total_hold: number;
+  declare total_cancel: number;
+  declare avg_service_seconds: number;
 
   static associate(models: any): void {
     DailySummary.belongsTo(models.ServiceLocation, {

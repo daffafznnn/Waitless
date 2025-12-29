@@ -321,3 +321,53 @@ export const refreshToken = async (req: Request, res: Response): Promise<void> =
     });
   }
 };
+
+/**
+ * POST /api/auth/set-token
+ * Set token as HTTP-only cookie (used by OAuth callback)
+ */
+export const setToken = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { token } = req.body;
+    
+    if (!token) {
+      res.status(400).json({
+        ok: false,
+        error: 'Token is required',
+      });
+      return;
+    }
+
+    // Verify token is valid by decoding it
+    const jwt = require('jsonwebtoken');
+    const JWT_SECRET = process.env.JWT_SECRET || 'waitless-jwt-secret-key';
+    
+    try {
+      jwt.verify(token, JWT_SECRET);
+    } catch (err) {
+      res.status(401).json({
+        ok: false,
+        error: 'Invalid token',
+      });
+      return;
+    }
+
+    // Set HTTP-only cookie
+    res.cookie('wlx_token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    });
+
+    res.json({
+      ok: true,
+      data: { message: 'Token set successfully' },
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      ok: false,
+      error: error.message || 'Failed to set token',
+    });
+  }
+};

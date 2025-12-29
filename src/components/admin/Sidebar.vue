@@ -5,6 +5,20 @@
       <div class="text-xl font-bold text-gray-900">WaitLess Admin</div>
     </div>
 
+    <!-- Branch Info -->
+    <div v-if="assignedLocation" class="px-4 py-3 bg-blue-50 border-b border-blue-100">
+      <div class="flex items-center gap-2">
+        <svg class="w-4 h-4 text-blue-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+        </svg>
+        <div>
+          <div class="text-xs text-blue-600 font-medium">Cabang:</div>
+          <div class="text-sm font-semibold text-blue-800">{{ assignedLocation.name }}</div>
+        </div>
+      </div>
+    </div>
+
     <!-- Navigation -->
     <nav class="px-4 py-4">
       <ul class="space-y-2">
@@ -76,6 +90,9 @@
       <div class="mt-1.5 text-sm font-medium text-gray-900">
         {{ displayName }}
       </div>
+      <div v-if="user?.role" class="mt-0.5 text-xs text-gray-500 capitalize">
+        {{ user.role.toLowerCase() }}
+      </div>
     </div>
   </div>
 </template>
@@ -83,6 +100,39 @@
 <script setup lang="ts">
 const { user } = useAuth()
 const route = useRoute()
+const adminStore = useAdminStore()
+
+// Track admin's assigned location
+const assignedLocation = ref<{ id: number; name: string } | null>(null)
+
+// Load admin's assigned location on mount
+onMounted(async () => {
+  await loadAssignedLocation()
+})
+
+const loadAssignedLocation = async () => {
+  try {
+    // Fetch accessible counters to determine assigned location
+    const counters = await adminStore.fetchAllAccessibleCounters()
+    
+    if (counters && counters.length > 0) {
+      const firstCounter = counters[0]
+      if (firstCounter.location_id) {
+        // Get location details
+        const locationApi = useLocationApi()
+        const response = await locationApi.getLocationById(firstCounter.location_id)
+        if (response.ok && response.data?.location) {
+          assignedLocation.value = {
+            id: response.data.location.id,
+            name: response.data.location.name
+          }
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Failed to load assigned location:', error)
+  }
+}
 
 // Computed for user display name
 const displayName = computed(() => {
@@ -93,4 +143,7 @@ const displayName = computed(() => {
 const isActiveRoute = (routePath: string) => {
   return route.path === routePath || route.path.startsWith(routePath)
 }
+
+// Expose assignedLocation for parent components
+defineExpose({ assignedLocation })
 </script>

@@ -1,34 +1,35 @@
 /* FILE: src/server/services/AdminService.ts */
+/**
+ * Admin Service - Optimized
+ * 
+ * Handles admin-related operations with:
+ * - BaseService integration for common functionality
+ * - Jakarta timezone for date handling
+ * - Proper error classes
+ * - Extracted helper methods
+ */
+
+import { Transaction } from 'sequelize';
+import { BaseService } from './BaseService';
 import { CounterRepository } from '../repositories/CounterRepository';
 import { LocationRepository } from '../repositories/LocationRepository';
 import { TicketRepository } from '../repositories/TicketRepository';
 import { EventRepository } from '../repositories/EventRepository';
 import { SummaryRepository } from '../repositories/SummaryRepository';
 import { LocationMemberRepository } from '../repositories/LocationMemberRepository';
-import { sequelize } from '../db';
 import { Counter } from '../models/counter.model';
+import { 
+  NotFoundError, 
+  ConflictError,
+  BusinessLogicError,
+  ForbiddenError 
+} from '../types/errors';
+import type { CreateCounterRequest, UpdateCounterRequest } from '../types';
 
-export interface CreateCounterRequest {
-  locationId: number;
-  name: string;
-  description?: string;
-  prefix: string;
-  openTime: string;
-  closeTime: string;
-  capacityPerDay: number;
-}
+// Re-export types for backwards compatibility
+export type { CreateCounterRequest, UpdateCounterRequest };
 
-export interface UpdateCounterRequest {
-  name?: string;
-  description?: string;
-  prefix?: string;
-  openTime?: string;
-  closeTime?: string;
-  capacityPerDay?: number;
-  isActive?: boolean;
-}
-
-export class AdminService {
+export class AdminService extends BaseService {
   private counterRepository: CounterRepository;
   private locationRepository: LocationRepository;
   private ticketRepository: TicketRepository;
@@ -37,6 +38,7 @@ export class AdminService {
   private locationMemberRepository: LocationMemberRepository;
 
   constructor() {
+    super('AdminService');
     this.counterRepository = new CounterRepository();
     this.locationRepository = new LocationRepository();
     this.ticketRepository = new TicketRepository();
@@ -45,75 +47,47 @@ export class AdminService {
     this.locationMemberRepository = new LocationMemberRepository();
   }
 
+  // ============================================
+  // Counter Management
+  // ============================================
+
   /**
    * Create a new counter
    */
   async createCounter(adminUserId: number, counterData: CreateCounterRequest): Promise<Counter> {
-    const transaction = await sequelize.transaction();
+    const validLocationId = this.validateId(counterData.locationId, 'Location ID');
     
-    try {
-      console.info('Creating new counter', { 
-        adminUserId, 
-        locationId: counterData.locationId, 
-        counterName: counterData.name 
-      });
-      // Verify admin has access to the location
-      await this.validateLocationAccess(adminUserId, counterData.locationId, transaction);
+    this.log('Creating new counter', { 
+      adminUserId, 
+      locationId: validLocationId, 
+      counterName: counterData.name 
+    });
 
-      // Check if counter name already exists in location
-      const nameExists = await this.counterRepository.existsByNameInLocation(
-        counterData.locationId,
-        counterData.name,
-        undefined,
-        transaction
-      );
+    return this.withTransaction(async (t) => {
+      await this.validateLocationAccess(adminUserId, validLocationId, t);
 
-      if (nameExists) {
-        throw new Error('Counter name already exists in this location');
-      }
+      // Check unique constraints
+      await this.ensureCounterNameUnique(validLocationId, counterData.name, undefined, t);
+      await this.ensureCounterPrefixUnique(validLocationId, counterData.prefix, undefined, t);
 
-      // Check if prefix already exists in location
-      const prefixExists = await this.counterRepository.existsByPrefixInLocation(
-        counterData.locationId,
-        counterData.prefix,
-        undefined,
-        transaction
-      );
-
-      if (prefixExists) {
-        throw new Error('Counter prefix already exists in this location');
-      }
-
-      // Create counter
       const counter = await this.counterRepository.create({
-        location_id: counterData.locationId,
+        location_id: validLocationId,
         name: counterData.name,
         description: counterData.description,
         prefix: counterData.prefix.toUpperCase(),
-        open_time: counterData.openTime,
-        close_time: counterData.closeTime,
-        capacity_per_day: counterData.capacityPerDay,
+        open_time: counterData.openTime || '08:00',
+        close_time: counterData.closeTime || '17:00',
+        capacity_per_day: counterData.capacityPerDay || 100,
         is_active: true,
-      }, transaction);
+      }, t);
 
-      await transaction.commit();
-      console.info('Counter created successfully', { 
-        adminUserId, 
+      this.log('Counter created successfully', { 
         counterId: counter.id, 
-        counterName: counter.name,
-        locationId: counter.location_id 
+        counterName: counter.name 
       });
+      
       return counter;
-    } catch (error) {
-      await transaction.rollback();
-      console.error('Failed to create counter', { 
-        error: error instanceof Error ? error.message : error, 
-        adminUserId, 
-        locationId: counterData.locationId, 
-        counterName: counterData.name 
-      });
-      throw error;
-    }
+    });
   }
 
   /**
@@ -124,155 +98,86 @@ export class AdminService {
     counterId: number,
     updates: UpdateCounterRequest
   ): Promise<Counter> {
-    const transaction = await sequelize.transaction();
+    const validCounterId = this.validateId(counterId, 'Counter ID');
     
-    try {
-      console.info({ 
-        adminUserId, 
-        counterId, 
-        updates: Object.keys(updates) 
-      }, 'Updating counter');
+    this.log('Updating counter', { 
+      adminUserId, 
+      counterId: validCounterId, 
+      updates: Object.keys(updates) 
+    });
 
-      // Get counter and verify access
-      const counter = await this.counterRepository.findById(counterId, transaction);
-      if (!counter) {
-        console.warn({ adminUserId, counterId }, 'Counter not found for update');
-        throw new Error('Counter not found');
-      }
-
-      await this.validateLocationAccess(adminUserId, counter.location_id, transaction);
+    return this.withTransaction(async (t) => {
+      const counter = await this.getCounterOrThrow(validCounterId, t);
+      await this.validateLocationAccess(adminUserId, counter.location_id, t);
 
       // Validate unique constraints if updating name or prefix
       if (updates.name && updates.name !== counter.name) {
-        const nameExists = await this.counterRepository.existsByNameInLocation(
-          counter.location_id,
-          updates.name,
-          counterId,
-          transaction
-        );
-        if (nameExists) {
-          throw new Error('Counter name already exists in this location');
-        }
+        await this.ensureCounterNameUnique(counter.location_id, updates.name, validCounterId, t);
       }
 
       if (updates.prefix && updates.prefix !== counter.prefix) {
-        const prefixExists = await this.counterRepository.existsByPrefixInLocation(
-          counter.location_id,
-          updates.prefix,
-          counterId,
-          transaction
-        );
-        if (prefixExists) {
-          throw new Error('Counter prefix already exists in this location');
-        }
+        await this.ensureCounterPrefixUnique(counter.location_id, updates.prefix, validCounterId, t);
       }
 
-      // Update counter
-      const updateData: any = {};
-      if (updates.name) updateData.name = updates.name;
-      if (updates.description !== undefined) updateData.description = updates.description;
-      if (updates.prefix) updateData.prefix = updates.prefix.toUpperCase();
-      if (updates.openTime) updateData.open_time = updates.openTime;
-      if (updates.closeTime) updateData.close_time = updates.closeTime;
-      if (updates.capacityPerDay) updateData.capacity_per_day = updates.capacityPerDay;
-      if (updates.isActive !== undefined) updateData.is_active = updates.isActive;
+      // Build update data
+      const updateData = this.buildCounterUpdateData(updates);
+      await this.counterRepository.update(validCounterId, updateData, t);
 
-      await this.counterRepository.update(counterId, updateData, transaction);
-
-      // Get updated counter
-      const updatedCounter = await this.counterRepository.findById(counterId, transaction);
+      const updatedCounter = await this.counterRepository.findById(validCounterId, t);
       
-      await transaction.commit();
-      console.info({ 
-        adminUserId, 
-        counterId, 
-        counterName: updatedCounter!.name,
-        updates: Object.keys(updates) 
-      }, 'Counter updated successfully');
+      this.log('Counter updated successfully', { 
+        counterId: validCounterId, 
+        counterName: updatedCounter!.name 
+      });
+      
       return updatedCounter!;
-    } catch (error) {
-      await transaction.rollback();
-      console.error({ 
-        error, 
-        adminUserId, 
-        counterId, 
-        updates: Object.keys(updates) 
-      }, 'Failed to update counter');
-      throw error;
-    }
+    });
   }
 
   /**
    * Delete a counter
    */
   async deleteCounter(adminUserId: number, counterId: number): Promise<void> {
-    const transaction = await sequelize.transaction();
+    const validCounterId = this.validateId(counterId, 'Counter ID');
     
-    try {
-      console.info({ adminUserId, counterId }, 'Deleting counter');
+    this.log('Deleting counter', { adminUserId, counterId: validCounterId });
 
-      // Get counter and verify access
-      const counter = await this.counterRepository.findById(counterId, transaction);
-      if (!counter) {
-        console.warn({ adminUserId, counterId }, 'Counter not found for deletion');
-        throw new Error('Counter not found');
-      }
+    return this.withTransaction(async (t) => {
+      const counter = await this.getCounterOrThrow(validCounterId, t);
+      await this.validateLocationAccess(adminUserId, counter.location_id, t);
 
-      await this.validateLocationAccess(adminUserId, counter.location_id, transaction);
-
-      // Check if counter has any tickets
+      // Check for existing tickets
       const hasTickets = await this.ticketRepository.findByCounterAndDate(
-        counterId,
-        new Date().toISOString().split('T')[0],
-        transaction
+        validCounterId,
+        this.getTodayDate(),
+        t
       );
 
       if (hasTickets.length > 0) {
-        console.warn({ 
-          adminUserId, 
-          counterId, 
-          ticketCount: hasTickets.length 
-        }, 'Cannot delete counter with existing tickets');
-        throw new Error('Cannot delete counter with existing tickets. Deactivate instead.');
+        throw new BusinessLogicError(
+          'Tidak dapat menghapus loket dengan tiket yang ada. Nonaktifkan saja.'
+        );
       }
 
-      // Delete counter
-      await this.counterRepository.delete(counterId, transaction);
+      await this.counterRepository.delete(validCounterId, t);
       
-      await transaction.commit();
-      console.info({ 
-        adminUserId, 
-        counterId, 
+      this.log('Counter deleted successfully', { 
+        counterId: validCounterId, 
         counterName: counter.name 
-      }, 'Counter deleted successfully');
-    } catch (error) {
-      await transaction.rollback();
-      console.error({ 
-        error, 
-        adminUserId, 
-        counterId 
-      }, 'Failed to delete counter');
-      throw error;
-    }
+      });
+    });
   }
 
   /**
    * Get all counters for a location
    */
   async getLocationCounters(adminUserId: number, locationId: number): Promise<Counter[]> {
-    const transaction = await sequelize.transaction();
+    const validLocationId = this.validateId(locationId, 'Location ID');
     
-    try {
-      await this.validateLocationAccess(adminUserId, locationId, transaction);
-      
-      const counters = await this.counterRepository.findByLocationId(locationId, transaction);
-      
-      await transaction.commit();
-      return counters;
-    } catch (error) {
-      await transaction.rollback();
-      throw error;
-    }
+    return this.withTransaction(async (t) => {
+      await this.validateLocationAccess(adminUserId, validLocationId, t);
+      return this.counterRepository.findByLocationId(validLocationId, t);
+    });
   }
 
   /**
@@ -283,46 +188,31 @@ export class AdminService {
     locationId: number, 
     date?: string
   ): Promise<any[]> {
-    const transaction = await sequelize.transaction();
-    
-    try {
-      await this.validateLocationAccess(adminUserId, locationId, transaction);
-      
-      const targetDate = date || new Date().toISOString().split('T')[0];
-      const counters = await this.counterRepository.findAllWithStatus(locationId, targetDate, transaction);
-      
-      await transaction.commit();
-      return counters;
-    } catch (error) {
-      await transaction.rollback();
-      throw error;
-    }
+    const validLocationId = this.validateId(locationId, 'Location ID');
+    const targetDate = this.getQueryDate(date);
+
+    return this.withTransaction(async (t) => {
+      await this.validateLocationAccess(adminUserId, validLocationId, t);
+      return this.counterRepository.findAllWithStatus(validLocationId, targetDate, t);
+    });
   }
+
+  // ============================================
+  // Queue & Activity
+  // ============================================
 
   /**
    * Get queue status for admin's counters
    */
   async getQueueStatus(adminUserId: number, counterId: number, date?: string) {
-    const transaction = await sequelize.transaction();
-    
-    try {
-      // Get counter and verify access
-      const counter = await this.counterRepository.findById(counterId, transaction);
-      if (!counter) {
-        throw new Error('Counter not found');
-      }
+    const validCounterId = this.validateId(counterId, 'Counter ID');
+    const targetDate = this.getQueryDate(date);
 
-      await this.validateLocationAccess(adminUserId, counter.location_id, transaction);
-
-      const targetDate = date || new Date().toISOString().split('T')[0];
-      const status = await this.ticketRepository.getQueueStatus(counterId, targetDate, transaction);
-      
-      await transaction.commit();
-      return status;
-    } catch (error) {
-      await transaction.rollback();
-      throw error;
-    }
+    return this.withTransaction(async (t) => {
+      const counter = await this.getCounterOrThrow(validCounterId, t);
+      await this.validateLocationAccess(adminUserId, counter.location_id, t);
+      return this.ticketRepository.getQueueStatus(validCounterId, targetDate, t);
+    });
   }
 
   /**
@@ -335,28 +225,20 @@ export class AdminService {
     page: number = 1,
     limit: number = 50
   ) {
-    const transaction = await sequelize.transaction();
-    
-    try {
-      await this.validateLocationAccess(adminUserId, locationId, transaction);
-      
-      const targetDate = date || new Date().toISOString().split('T')[0];
-      const offset = (page - 1) * limit;
-      
-      const activity = await this.eventRepository.getLocationActivityLog(
-        locationId,
+    const validLocationId = this.validateId(locationId, 'Location ID');
+    const targetDate = this.getQueryDate(date);
+    const { offset, limit: validLimit } = this.parsePagination(page, limit);
+
+    return this.withTransaction(async (t) => {
+      await this.validateLocationAccess(adminUserId, validLocationId, t);
+      return this.eventRepository.getLocationActivityLog(
+        validLocationId,
         targetDate,
         offset,
-        limit,
-        transaction
+        validLimit,
+        t
       );
-      
-      await transaction.commit();
-      return activity;
-    } catch (error) {
-      await transaction.rollback();
-      throw error;
-    }
+    });
   }
 
   /**
@@ -369,247 +251,188 @@ export class AdminService {
     page: number = 1,
     limit: number = 50
   ) {
-    const transaction = await sequelize.transaction();
-    
-    try {
-      // Get counter and verify access
-      const counter = await this.counterRepository.findById(counterId, transaction);
-      if (!counter) {
-        throw new Error('Counter not found');
-      }
+    const validCounterId = this.validateId(counterId, 'Counter ID');
+    const targetDate = this.getQueryDate(date);
+    const { offset, limit: validLimit } = this.parsePagination(page, limit);
 
-      await this.validateLocationAccess(adminUserId, counter.location_id, transaction);
-
-      const targetDate = date || new Date().toISOString().split('T')[0];
-      const offset = (page - 1) * limit;
-      
-      const activity = await this.eventRepository.getCounterActivityLog(
-        counterId,
+    return this.withTransaction(async (t) => {
+      const counter = await this.getCounterOrThrow(validCounterId, t);
+      await this.validateLocationAccess(adminUserId, counter.location_id, t);
+      return this.eventRepository.getCounterActivityLog(
+        validCounterId,
         targetDate,
         offset,
-        limit,
-        transaction
+        validLimit,
+        t
       );
-      
-      await transaction.commit();
-      return activity;
-    } catch (error) {
-      await transaction.rollback();
-      throw error;
-    }
+    });
   }
+
+  // ============================================
+  // Dashboard & Stats
+  // ============================================
 
   /**
    * Get daily summary for admin's location
    */
   async getDailySummary(adminUserId: number, locationId: number, date?: string) {
-    const transaction = await sequelize.transaction();
-    
-    try {
-      await this.validateLocationAccess(adminUserId, locationId, transaction);
-      
-      const targetDate = date || new Date().toISOString().split('T')[0];
-      const summary = await this.summaryRepository.findByLocationAndDate(locationId, targetDate, transaction);
-      
-      await transaction.commit();
-      return summary;
-    } catch (error) {
-      await transaction.rollback();
-      throw error;
-    }
+    const validLocationId = this.validateId(locationId, 'Location ID');
+    const targetDate = this.getQueryDate(date);
+
+    return this.withTransaction(async (t) => {
+      await this.validateLocationAccess(adminUserId, validLocationId, t);
+      return this.summaryRepository.findByLocationAndDate(validLocationId, targetDate, t);
+    });
   }
 
   /**
    * Get dashboard stats for admin
    */
   async getDashboardStats(adminUserId: number, locationId: number, date?: string) {
-    const transaction = await sequelize.transaction();
-    
-    try {
-      await this.validateLocationAccess(adminUserId, locationId, transaction);
-      
-      const targetDate = date || new Date().toISOString().split('T')[0];
-      const stats = await this.summaryRepository.getDashboardStats(locationId, targetDate, transaction);
-      
-      await transaction.commit();
-      return stats;
-    } catch (error) {
-      await transaction.rollback();
-      throw error;
-    }
+    const validLocationId = this.validateId(locationId, 'Location ID');
+    const targetDate = this.getQueryDate(date);
+
+    return this.withTransaction(async (t) => {
+      await this.validateLocationAccess(adminUserId, validLocationId, t);
+      return this.summaryRepository.getDashboardStats(validLocationId, targetDate, t);
+    });
   }
 
   /**
    * Get general dashboard stats for admin (aggregated from all accessible locations)
    */
   async getGeneralDashboardStats(adminUserId: number, date?: string) {
-    const transaction = await sequelize.transaction();
-    
-    try {
-      // Get all locations accessible to admin
-      const userAccessibleLocations = await this.getUserAccessibleLocations(adminUserId, transaction);
+    const targetDate = this.getQueryDate(date);
+
+    return this.withTransaction(async (t) => {
+      const locations = await this.getUserAccessibleLocations(adminUserId, t);
       
-      const targetDate = date || new Date().toISOString().split('T')[0];
-      
-      // If no locations found, return default empty stats
-      if (userAccessibleLocations.length === 0) {
-        await transaction.commit();
+      if (locations.length === 0) {
         return this.getDefaultDashboardStats();
       }
-      
-      // Filter out any invalid locations
-      const validLocations = userAccessibleLocations.filter(location => location && location.id);
-      
-      if (validLocations.length === 0) {
-        await transaction.commit();
-        return this.getDefaultDashboardStats();
-      }
-      
+
       const allStats = await Promise.all(
-        validLocations.map(location => 
-          this.summaryRepository.getDashboardStats(location.id, targetDate, transaction)
+        locations.map(loc => 
+          this.summaryRepository.getDashboardStats(loc.id, targetDate, t)
         )
       );
 
-      // Combine stats from all locations
-      const aggregatedStats = this.aggregateLocationStats(allStats);
-      
-      await transaction.commit();
-      return aggregatedStats;
-    } catch (error) {
-      await transaction.rollback();
-      throw error;
-    }
+      return this.aggregateLocationStats(allStats);
+    });
   }
 
   /**
    * Get active queues from all accessible locations
    */
   async getActiveQueues(adminUserId: number) {
-    const transaction = await sequelize.transaction();
-    
-    try {
-      // Get all locations accessible to admin
-      const userAccessibleLocations = await this.getUserAccessibleLocations(adminUserId, transaction);
+    const targetDate = this.getTodayDate();
+
+    return this.withTransaction(async (t) => {
+      const locations = await this.getUserAccessibleLocations(adminUserId, t);
       
-      // If no locations found, return empty array
-      if (userAccessibleLocations.length === 0) {
-        await transaction.commit();
+      if (locations.length === 0) {
         return [];
       }
-      
-      // Filter out any invalid locations
-      const validLocations = userAccessibleLocations.filter(location => location && location.id);
-      
-      if (validLocations.length === 0) {
-        await transaction.commit();
-        return [];
-      }
-      
-      const targetDate = new Date().toISOString().split('T')[0];
-      
-      // Get counters with status from all valid locations
-      const allActiveQueues = await Promise.all(
-        validLocations.map(location => 
-          this.counterRepository.findAllWithStatus(location.id, targetDate, transaction)
+
+      const allQueues = await Promise.all(
+        locations.map(loc => 
+          this.counterRepository.findAllWithStatus(loc.id, targetDate, t)
         )
       );
 
-      // Flatten the array and filter only active counters
-      const flattenedQueues = allActiveQueues.flat().filter(counter => 
-        counter && counter.is_active
-      );
-      
-      await transaction.commit();
-      return flattenedQueues;
-    } catch (error) {
-      await transaction.rollback();
-      throw error;
-    }
+      return allQueues.flat().filter(counter => counter?.is_active);
+    });
   }
 
   /**
    * Get all counters accessible to admin (across all locations)
    */
   async getAllAccessibleCounters(adminUserId: number) {
-    const transaction = await sequelize.transaction();
-    
-    try {
-      // Get locations that the admin has access to through location_members table
-      const userAccessibleLocations = await this.getUserAccessibleLocations(adminUserId, transaction);
+    return this.withTransaction(async (t) => {
+      const locations = await this.getUserAccessibleLocations(adminUserId, t);
       
-      // If no accessible locations found, return empty array
-      if (userAccessibleLocations.length === 0) {
-        await transaction.commit();
-        return [];
-      }
-      
-      // Filter out invalid locations
-      const validLocations = userAccessibleLocations.filter(location => {
-        const locationData = location?.dataValues || location;
-        return locationData && locationData.id && (typeof locationData.id === 'number' || typeof locationData.id === 'string');
-      });
-
-      if (validLocations.length === 0) {
-        await transaction.commit();
+      if (locations.length === 0) {
         return [];
       }
 
-      // Get counters from all accessible locations
       const allCounters = await Promise.all(
-        validLocations.map(location => {
-          const locationData = location?.dataValues || location;
-          return this.counterRepository.findByLocationId(locationData.id, transaction);
-        })
+        locations.map(loc => this.counterRepository.findByLocationId(loc.id, t))
       );
 
-      const flattenedCounters = allCounters.flat().filter(counter => counter);
-      
-      await transaction.commit();
-      return flattenedCounters;
-    } catch (error) {
-      await transaction.rollback();
-      throw error;
+      return allCounters.flat().filter(Boolean);
+    });
+  }
+
+  // ============================================
+  // Private Helper Methods
+  // ============================================
+
+  /**
+   * Get counter or throw NotFoundError
+   */
+  private async getCounterOrThrow(counterId: number, t?: Transaction): Promise<Counter> {
+    const counter = await this.counterRepository.findById(counterId, t);
+    if (!counter) {
+      throw new NotFoundError('Loket');
+    }
+    return counter;
+  }
+
+  /**
+   * Ensure counter name is unique in location
+   */
+  private async ensureCounterNameUnique(
+    locationId: number,
+    name: string,
+    excludeCounterId?: number,
+    t?: Transaction
+  ): Promise<void> {
+    const exists = await this.counterRepository.existsByNameInLocation(
+      locationId, name, excludeCounterId, t
+    );
+    if (exists) {
+      throw new ConflictError('Nama loket sudah ada di cabang ini');
     }
   }
 
   /**
-   * Get locations accessible to admin user
+   * Ensure counter prefix is unique in location
    */
-  private async getUserAccessibleLocations(adminUserId: number, transaction?: any) {
-    try {
-      // Get locations where the admin is a member through location_members table
-      const memberLocations = await this.locationMemberRepository.findByUserId(adminUserId, transaction);
-      
-      if (memberLocations && memberLocations.length > 0) {
-        // Since join already returns location data, extract it directly
-        const locations = memberLocations.map(member => {
-          const memberData = member as any;
-          
-          // Location data is already joined and available in the 'location' property
-          if (memberData.location) {
-            return memberData.location;
-          }
-          
-          return null;
-        }).filter(Boolean);
-        
-        if (locations.length > 0) {
-          return locations;
-        }
-      }
-      
-      return [];
-    } catch (error) {
-      return [];
+  private async ensureCounterPrefixUnique(
+    locationId: number,
+    prefix: string,
+    excludeCounterId?: number,
+    t?: Transaction
+  ): Promise<void> {
+    const exists = await this.counterRepository.existsByPrefixInLocation(
+      locationId, prefix, excludeCounterId, t
+    );
+    if (exists) {
+      throw new ConflictError('Prefix loket sudah ada di cabang ini');
     }
+  }
+
+  /**
+   * Build update data object from update request
+   */
+  private buildCounterUpdateData(updates: UpdateCounterRequest): Record<string, any> {
+    const data: Record<string, any> = {};
+    
+    if (updates.name) data.name = updates.name;
+    if (updates.description !== undefined) data.description = updates.description;
+    if (updates.prefix) data.prefix = updates.prefix.toUpperCase();
+    if (updates.openTime) data.open_time = updates.openTime;
+    if (updates.closeTime) data.close_time = updates.closeTime;
+    if (updates.capacityPerDay) data.capacity_per_day = updates.capacityPerDay;
+    if (updates.isActive !== undefined) data.is_active = updates.isActive;
+    
+    return data;
   }
 
   /**
    * Aggregate stats from multiple locations
    */
   private aggregateLocationStats(locationStats: any[]): any {
-    // Initialize aggregated stats with the format expected by frontend
     const aggregated = {
       totalQueues: 0,
       activeUsers: 0,
@@ -628,49 +451,45 @@ export class AdminService {
     let totalIssuedYesterday = 0;
     let totalDoneYesterday = 0;
 
-    locationStats.forEach(stats => {
-      if (stats && stats.today) {
-        // Aggregate current data
-        totalIssuedToday += stats.today.total_issued || 0;
-        totalDoneToday += stats.today.total_done || 0;
-        
-        if (stats.today.avg_service_seconds && stats.today.avg_service_seconds > 0) {
-          totalWaitTime += Math.round(stats.today.avg_service_seconds / 60); // Convert to minutes
-          locationsWithWaitTime++;
-        }
-        
-        // Aggregate yesterday's data for trends
-        if (stats.yesterday) {
-          totalIssuedYesterday += stats.yesterday.total_issued || 0;
-          totalDoneYesterday += stats.yesterday.total_done || 0;
-        }
+    for (const stats of locationStats) {
+      if (!stats?.today) continue;
+      
+      totalIssuedToday += stats.today.total_issued || 0;
+      totalDoneToday += stats.today.total_done || 0;
+      
+      if (stats.today.avg_service_seconds > 0) {
+        totalWaitTime += Math.round(stats.today.avg_service_seconds / 60);
+        locationsWithWaitTime++;
       }
-    });
+      
+      if (stats.yesterday) {
+        totalIssuedYesterday += stats.yesterday.total_issued || 0;
+        totalDoneYesterday += stats.yesterday.total_done || 0;
+      }
+    }
 
-    // Set aggregated values
     aggregated.totalQueues = totalIssuedToday;
-    aggregated.activeUsers = totalDoneToday; // Using total done as "active users" metric
+    aggregated.activeUsers = totalDoneToday;
 
-    // Calculate average wait time across all locations
     if (locationsWithWaitTime > 0) {
       aggregated.avgWaitTime = Math.round(totalWaitTime / locationsWithWaitTime);
     }
 
     // Calculate trends
     if (totalIssuedYesterday > 0) {
-      const queueChange = ((totalIssuedToday - totalIssuedYesterday) / totalIssuedYesterday) * 100;
+      const change = ((totalIssuedToday - totalIssuedYesterday) / totalIssuedYesterday) * 100;
       aggregated.queuesTrend = {
-        value: Math.abs(Math.round(queueChange)),
-        type: queueChange > 0 ? 'increase' : queueChange < 0 ? 'decrease' : 'neutral',
+        value: Math.abs(Math.round(change)),
+        type: change > 0 ? 'increase' : change < 0 ? 'decrease' : 'neutral',
         period: 'vs yesterday'
       } as any;
     }
 
     if (totalDoneYesterday > 0) {
-      const userChange = ((totalDoneToday - totalDoneYesterday) / totalDoneYesterday) * 100;
+      const change = ((totalDoneToday - totalDoneYesterday) / totalDoneYesterday) * 100;
       aggregated.usersTrend = {
-        value: Math.abs(Math.round(userChange)),
-        type: userChange > 0 ? 'increase' : userChange < 0 ? 'decrease' : 'neutral',
+        value: Math.abs(Math.round(change)),
+        type: change > 0 ? 'increase' : change < 0 ? 'decrease' : 'neutral',
         period: 'vs yesterday'
       } as any;
     }
@@ -695,20 +514,70 @@ export class AdminService {
   }
 
   /**
-   * Validate admin has access to location
+   * Get locations accessible to admin user (only active memberships)
    */
-  private async validateLocationAccess(_adminUserId: number, locationId: number, transaction?: any): Promise<void> {
-    // This would check location_members table to verify admin access
-    // For now, simplified check - in real implementation, check location_members
-    const location = await this.locationRepository.findByIdSimple(locationId, transaction);
+  private async getUserAccessibleLocations(adminUserId: number, t?: Transaction) {
+    try {
+      const memberLocations = await this.locationMemberRepository.findByUserId(adminUserId, t);
+      
+      if (!memberLocations?.length) {
+        return [];
+      }
+
+      // Only return locations where membership is active
+      return memberLocations
+        .filter((member: any) => member.is_active === true)
+        .map((member: any) => member.location)
+        .filter((loc): loc is { id: number; name: string } => loc && typeof loc.id === 'number');
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Get the single location this admin is assigned to
+   * (ADMIN can only be assigned to ONE location)
+   */
+  async getAdminAssignedLocation(adminUserId: number): Promise<{ id: number; name: string } | null> {
+    const locations = await this.getUserAccessibleLocations(adminUserId);
+    return locations.length > 0 ? locations[0] : null;
+  }
+
+  /**
+   * Validate admin has access to location
+   * - Checks if user is a member of the location
+   * - Verifies membership is_active = true
+   * - Throws ForbiddenError if not authorized
+   */
+  private async validateLocationAccess(
+    adminUserId: number, 
+    locationId: number, 
+    t?: Transaction
+  ): Promise<void> {
+    // First check if location exists
+    const location = await this.locationRepository.findByIdSimple(locationId, t);
     if (!location) {
-      throw new Error('Location not found');
+      throw new NotFoundError('Cabang');
     }
 
-    // TODO: Add proper location member access check here
-    // const membership = await LocationMemberRepository.findByUserAndLocation(adminUserId, locationId, transaction);
-    // if (!membership || !membership.is_active) {
-    //   throw new Error('Access denied to this location');
-    // }
+    // Check if admin is the owner (owners have full access)
+    if (location.owner_id === adminUserId) {
+      return; // Owner has access to all their locations
+    }
+
+    // Check if admin is an active member of this location
+    const membership = await this.locationMemberRepository.findByLocationAndUser(
+      locationId,
+      adminUserId,
+      t
+    );
+
+    if (!membership) {
+      throw new ForbiddenError('Anda tidak memiliki akses ke cabang ini');
+    }
+
+    if (!membership.is_active) {
+      throw new ForbiddenError('Akses Anda ke cabang ini telah dinonaktifkan');
+    }
   }
 }

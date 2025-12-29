@@ -106,12 +106,12 @@ const iconColor = computed(() => colorClasses[props.color as keyof typeof colorC
 
 // Trend calculations
 const trendColor = computed(() => {
-  if (props.trend === undefined) return ''
+  if (props.trend === undefined || props.trend === null || typeof props.trend !== 'number') return ''
   return props.trend >= 0 ? 'text-green-600' : 'text-red-600'
 })
 
 const trendText = computed(() => {
-  if (props.trend === undefined) return ''
+  if (props.trend === undefined || props.trend === null || typeof props.trend !== 'number') return ''
   const sign = props.trend >= 0 ? '+' : ''
   return `${sign}${props.trend}%`
 })

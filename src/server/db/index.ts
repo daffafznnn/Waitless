@@ -67,7 +67,8 @@ export const connectDatabase = async (): Promise<void> => {
   // Import models after sequelize is initialized
   await import('../models');
   
-  // Sync models (only in development)
+  // Sync models - use plain sync (not alter) since tables are managed by migrations
+  // alter:true can cause "Too many keys" errors on already-migrated tables
   if (process.env.NODE_ENV === 'development') {
     await sequelize.sync({ alter: false });
   }

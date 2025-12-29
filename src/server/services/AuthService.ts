@@ -2,6 +2,7 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { UserRepository } from '../repositories/UserRepository';
+import { LocationMemberRepository } from '../repositories/LocationMemberRepository';
 import { UserCreationAttributes, Role } from '../models/user.model';
 import { sequelize } from '../db';
 
@@ -25,6 +26,8 @@ export interface AuthResponse {
     name: string;
     phone?: string;
     role: Role;
+    google_id?: string;
+    avatar_url?: string;
   };
   token: string;
 }
@@ -39,11 +42,13 @@ export interface TokenPayload {
 
 export class AuthService {
   private userRepository: UserRepository;
+  private memberRepository: LocationMemberRepository;
   private jwtSecret: string;
   private jwtExpiresIn: string;
 
   constructor() {
     this.userRepository = new UserRepository();
+    this.memberRepository = new LocationMemberRepository();
     this.jwtSecret = process.env.JWT_SECRET || 'fallback-secret-key';
     this.jwtExpiresIn = process.env.JWT_EXPIRES_IN || '7d';
   }
@@ -92,6 +97,8 @@ export class AuthService {
           name: user.name,
           phone: user.phone,
           role: user.role,
+          google_id: user.google_id,
+          avatar_url: user.avatar_url,
         },
         token,
       };
@@ -124,6 +131,11 @@ export class AuthService {
       throw new Error('Invalid email or password');
     }
 
+    // Check if ADMIN user is active in location_members
+    if (user.role === Role.ADMIN) {
+      await this.checkAdminIsActive(user.id);
+    }
+
     // Generate token
     const token = this.generateToken({
       userId: user.id,
@@ -138,9 +150,31 @@ export class AuthService {
         name: user.name,
         phone: user.phone,
         role: user.role,
+        google_id: user.google_id,
+        avatar_url: user.avatar_url,
       },
       token,
     };
+  }
+
+  /**
+   * Check if ADMIN user is active in any location
+   * If is_active is false for all memberships, throw error
+   */
+  private async checkAdminIsActive(userId: number): Promise<void> {
+    const memberships = await this.memberRepository.findByUserId(userId);
+    
+    // If user has no memberships, they can still login (they might be a new admin)
+    if (memberships.length === 0) {
+      return;
+    }
+
+    // Check if at least one membership is active
+    const hasActiveMembership = memberships.some(m => m.is_active === true);
+    
+    if (!hasActiveMembership) {
+      throw new Error('Akun Anda telah dinonaktifkan. Silakan hubungi admin atau owner.');
+    }
   }
 
   /**
@@ -150,16 +184,21 @@ export class AuthService {
     try {
       const decoded = jwt.verify(token, this.jwtSecret) as TokenPayload;
       
-      // Optional: Check if user still exists and is active
+      // Check if user still exists
       const user = await this.userRepository.findById(decoded.userId);
       if (!user) {
         throw new Error('User not found');
       }
 
+      // Check if ADMIN user is still active in location_members
+      if (user.role === Role.ADMIN) {
+        await this.checkAdminIsActive(user.id);
+      }
+
       return {
         userId: decoded.userId,
         email: decoded.email,
-        role: decoded.role,
+        role: user.role, // Use current role from DB
       };
     } catch (error) {
       if (error instanceof jwt.JsonWebTokenError) {
@@ -242,6 +281,8 @@ export class AuthService {
     name: string;
     phone?: string;
     role: Role;
+    google_id?: string;
+    avatar_url?: string;
     created_at: Date;
   }> {
     const user = await this.userRepository.findById(userId);
@@ -255,6 +296,8 @@ export class AuthService {
       name: user.name,
       phone: user.phone,
       role: user.role,
+      google_id: user.google_id,
+      avatar_url: user.avatar_url,
       created_at: user.created_at,
     };
   }
@@ -271,6 +314,8 @@ export class AuthService {
     name: string;
     phone?: string;
     role: Role;
+    google_id?: string;
+    avatar_url?: string;
   }> {
     const transaction = await sequelize.transaction();
     
@@ -305,6 +350,8 @@ export class AuthService {
         name: updatedUser!.name,
         phone: updatedUser!.phone,
         role: updatedUser!.role,
+        google_id: updatedUser!.google_id,
+        avatar_url: updatedUser!.avatar_url,
       };
     } catch (error) {
       await transaction.rollback();

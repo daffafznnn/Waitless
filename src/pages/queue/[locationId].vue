@@ -1,319 +1,322 @@
-<!-- FILE: src/pages/(visitor)/queue/[locationId].vue -->
-<template>
-  <PublicLayout>
-    <div class="min-h-screen bg-surface-50">
-      <!-- Header -->
-      <div class="bg-white shadow-sm border-b border-surface-200">
-        <div class="container mx-auto px-4 py-6">
-          <div class="flex items-center justify-between">
-            <div>
-              <h1 class="text-2xl font-bold text-surface-900">{{ location?.name || 'Loading...' }}</h1>
-              <p class="text-surface-600 mt-1">{{ location?.address }}</p>
-            </div>
-            <Button
-              variant="secondary"
-              size="sm"
-              to="/queue/me"
-              label="My Tickets"
-              v-if="hasActiveTickets"
-            />
-          </div>
-        </div>
-      </div>
-
-      <!-- Loading State -->
-      <div v-if="pending" class="container mx-auto px-4 py-12 text-center">
-        <div class="animate-spin h-8 w-8 border-4 border-primary-600 border-t-transparent rounded-full mx-auto mb-4"></div>
-        <p class="text-surface-600">Loading location details...</p>
-      </div>
-
-      <!-- Error State -->
-      <div v-else-if="error" class="container mx-auto px-4 py-12 text-center">
-        <div class="bg-danger-50 text-danger-800 p-6 rounded-lg max-w-md mx-auto">
-          <h3 class="font-semibold mb-2">Location Not Found</h3>
-          <p class="mb-4">The requested location could not be found.</p>
-          <Button variant="primary" to="/" label="Back to Home" />
-        </div>
-      </div>
-
-      <!-- Content -->
-      <div v-else class="container mx-auto px-4 py-8">
-        <div class="grid lg:grid-cols-2 gap-8">
-          <!-- Location Info & Queue Status -->
-          <div>
-            <!-- Location Info Card -->
-            <div class="bg-white rounded-lg shadow-sm p-6 mb-6">
-              <h2 class="text-lg font-semibold mb-4">Location Information</h2>
-              <div class="space-y-3 text-sm">
-                <div class="flex items-center">
-                  <svg class="w-4 h-4 text-surface-400 mr-3" fill="currentColor" viewBox="0 0 20 20">
-                    <path fill-rule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clip-rule="evenodd" />
-                  </svg>
-                  <span>{{ location?.address }}</span>
-                </div>
-                <div class="flex items-center" v-if="location?.phone">
-                  <svg class="w-4 h-4 text-surface-400 mr-3" fill="currentColor" viewBox="0 0 20 20">
-                    <path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z" />
-                  </svg>
-                  <span>{{ location?.phone }}</span>
-                </div>
-                <div class="flex items-center">
-                  <svg class="w-4 h-4 text-surface-400 mr-3" fill="currentColor" viewBox="0 0 20 20">
-                    <path fill-rule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clip-rule="evenodd" />
-                  </svg>
-                  <span>{{ formatBusinessHours(location?.business_hours) }}</span>
-                </div>
-              </div>
-            </div>
-
-            <!-- Current Queue Status -->
-            <div class="bg-white rounded-lg shadow-sm p-6">
-              <h2 class="text-lg font-semibold mb-4">Current Queue Status</h2>
-              <div class="grid grid-cols-2 gap-4" v-if="counters?.length">
-                <div v-for="counter in counters" :key="counter.id" 
-                     class="border border-surface-200 rounded-lg p-4 text-center">
-                  <h3 class="font-medium text-surface-900 mb-2">{{ counter.name }}</h3>
-                  <div class="text-2xl font-bold text-primary-600 mb-1">
-                    {{ counter.current_queue_count || 0 }}
-                  </div>
-                  <p class="text-xs text-surface-500">people in queue</p>
-                  <StatusBadge 
-                    :status="counter.status" 
-                    :variant="getCounterStatusVariant(counter.status)"
-                    class="mt-2"
-                  />
-                </div>
-              </div>
-              <EmptyState 
-                v-else
-                title="No Counters Available"
-                description="This location currently has no active service counters."
-              />
-            </div>
-          </div>
-
-          <!-- Get Ticket Form -->
-          <div>
-            <div class="bg-white rounded-lg shadow-sm p-6 sticky top-8">
-              <h2 class="text-lg font-semibold mb-4">Get Your Ticket</h2>
-              
-              <form @submit.prevent="issueTicket" class="space-y-4">
-                <!-- Counter Selection -->
-                <div>
-                  <label class="block text-sm font-medium text-surface-700 mb-2">
-                    Select Counter
-                  </label>
-                  <select 
-                    v-model="selectedCounter" 
-                    required
-                    class="w-full rounded-lg border-surface-300 focus:border-primary-500 focus:ring-primary-500"
-                  >
-                    <option value="">Choose a counter...</option>
-                    <option 
-                      v-for="counter in availableCounters" 
-                      :key="counter.id" 
-                      :value="counter.id"
-                    >
-                      {{ counter.name }} ({{ counter.current_queue_count || 0 }} in queue)
-                    </option>
-                  </select>
-                </div>
-
-                <!-- Customer Info -->
-                <div>
-                  <label class="block text-sm font-medium text-surface-700 mb-2">
-                    Your Name (Optional)
-                  </label>
-                  <input 
-                    v-model="customerName"
-                    type="text" 
-                    placeholder="Enter your name"
-                    class="w-full rounded-lg border-surface-300 focus:border-primary-500 focus:ring-primary-500"
-                  >
-                </div>
-
-                <!-- Phone Number -->
-                <div>
-                  <label class="block text-sm font-medium text-surface-700 mb-2">
-                    Phone Number (Optional)
-                  </label>
-                  <input 
-                    v-model="customerPhone"
-                    type="tel" 
-                    placeholder="Enter your phone number"
-                    class="w-full rounded-lg border-surface-300 focus:border-primary-500 focus:ring-primary-500"
-                  >
-                  <p class="text-xs text-surface-500 mt-1">
-                    For notifications when it's your turn
-                  </p>
-                </div>
-
-                <!-- Estimated Wait Time -->
-                <div v-if="estimatedWaitTime" class="bg-primary-50 border border-primary-200 rounded-lg p-4">
-                  <div class="flex items-center">
-                    <svg class="w-5 h-5 text-primary-600 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                      <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd" />
-                    </svg>
-                    <div>
-                      <p class="text-sm font-medium text-primary-900">Estimated Wait Time</p>
-                      <p class="text-sm text-primary-700">{{ estimatedWaitTime }} minutes</p>
-                    </div>
-                  </div>
-                </div>
-
-                <!-- Submit Button -->
-                <Button
-                  type="submit"
-                  variant="primary"
-                  size="lg"
-                  :loading="isIssuing"
-                  :disabled="!selectedCounter"
-                  label="Get My Ticket"
-                  class="w-full"
-                />
-              </form>
-
-              <!-- Success Message -->
-              <div v-if="ticketIssued" class="mt-4 p-4 bg-success-50 border border-success-200 rounded-lg">
-                <div class="flex items-center">
-                  <svg class="w-5 h-5 text-success-600 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
-                  </svg>
-                  <div>
-                    <p class="text-sm font-medium text-success-900">Ticket Issued Successfully!</p>
-                    <p class="text-sm text-success-700">Your queue number is #{{ issuedTicket?.queue_number }}</p>
-                  </div>
-                </div>
-                <div class="mt-3 flex gap-2">
-                  <Button
-                    size="sm"
-                    variant="success"
-                    :to="`/queue/me`"
-                    label="View My Tickets"
-                  />
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    @click="resetForm"
-                    label="Get Another Ticket"
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </PublicLayout>
-</template>
-
 <script setup lang="ts">
-import type { Location, Counter, Ticket } from '~/types'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { StatusBadge, CounterCard, BottomNavigation } from '@/components/visitor'
+import type { Counter } from '~/types'
+
+definePageMeta({
+  layout: false
+})
 
 const route = useRoute()
-const { $api } = useNuxtApp()
+const router = useRouter()
+const { getLocationDetail, takeQueueNumber } = useVisitorApi()
+const authStore = useAuthStore()
+const toast = useToast()
+const { $modal } = useNuxtApp()
 
-// Page meta
-definePageMeta({
-  layout: 'public'
-})
+const locationId = computed(() => Number(route.params.locationId))
 
-// Reactive data
-const locationId = computed(() => route.params.locationId as string)
-const selectedCounter = ref('')
-const customerName = ref('')
-const customerPhone = ref('')
-const isIssuing = ref(false)
-const ticketIssued = ref(false)
-const issuedTicket = ref<Ticket | null>(null)
-const estimatedWaitTime = ref<number | null>(null)
+// State
+const isLoading = ref(true)
+const isTakingNumber = ref(false)
+const location = ref<{
+  id: number
+  name: string
+  address: string
+  status: 'open' | 'closed'
+  statusText: string
+} | null>(null)
+const counters = ref<(Counter & { waiting_count?: number; current_serving?: string })[]>([])
 
-// Fetch location data
-const { data: location, pending, error } = await useFetch<Location>(`/api/locations/${locationId.value}`)
-
-// Fetch counters for this location
-const { data: counters } = await useFetch<Counter[]>(`/api/locations/${locationId.value}/counters`)
-
-// Computed properties
-const availableCounters = computed(() => {
-  return counters.value?.filter(counter => counter.status === 'active') || []
-})
-
-const hasActiveTickets = computed(() => {
-  // Check if user has active tickets (implement based on your auth system)
-  return false
-})
-
-// Methods
-const getCounterStatusVariant = (status: string) => {
-  const variants = {
-    'active': 'success',
-    'busy': 'warning', 
-    'inactive': 'danger'
-  }
-  return variants[status as keyof typeof variants] || 'secondary'
-}
-
-const formatBusinessHours = (hours: any) => {
-  if (!hours) return 'Hours not available'
-  return `${hours.open || '9:00 AM'} - ${hours.close || '5:00 PM'}`
-}
-
-const calculateEstimatedWaitTime = async () => {
-  if (!selectedCounter.value) {
-    estimatedWaitTime.value = null
+// Load location data
+const loadLocationData = async () => {
+  if (!locationId.value) {
+    toast.add({
+      title: 'Error',
+      description: 'ID lokasi tidak valid',
+      color: 'red'
+    })
     return
   }
   
+  isLoading.value = true
   try {
-    const response = await $api.queue.getEstimatedWaitTime(selectedCounter.value)
-    estimatedWaitTime.value = response.estimated_minutes
-  } catch (error) {
-    console.error('Failed to calculate wait time:', error)
-    estimatedWaitTime.value = null
-  }
-}
-
-const issueTicket = async () => {
-  if (!selectedCounter.value) return
-  
-  isIssuing.value = true
-  try {
-    const ticket = await $api.queue.issueTicket({
-      counterId: selectedCounter.value,
-      customerName: customerName.value || null,
-      customerPhone: customerPhone.value || null
-    })
+    const data = await getLocationDetail(locationId.value)
     
-    issuedTicket.value = ticket
-    ticketIssued.value = true
+    if (!data.location) {
+      await $modal.alert({
+        title: 'Lokasi Tidak Ditemukan',
+        message: 'Lokasi yang Anda cari tidak ditemukan atau sudah dihapus.',
+        type: 'error'
+      })
+      router.back()
+      return
+    }
+    
+    location.value = {
+      id: data.location.id,
+      name: data.location.name,
+      address: data.location.address,
+      status: data.location.status,
+      statusText: data.location.statusText
+    }
+    counters.value = data.counters
   } catch (error) {
-    console.error('Failed to issue ticket:', error)
-    // Handle error (show notification)
+    console.error('Failed to load location:', error)
+    toast.add({
+      title: 'Error',
+      description: 'Gagal memuat data lokasi',
+      color: 'red'
+    })
   } finally {
-    isIssuing.value = false
+    isLoading.value = false
   }
 }
 
-const resetForm = () => {
-  selectedCounter.value = ''
-  customerName.value = ''
-  customerPhone.value = ''
-  ticketIssued.value = false
-  issuedTicket.value = null
-  estimatedWaitTime.value = null
+// Take queue number
+const handleTakeNumber = async (counterId: number) => {
+  const counter = counters.value.find(c => c.id === counterId)
+  if (!counter || !counter.is_active) {
+    toast.add({
+      title: 'Tidak Tersedia',
+      description: 'Loket ini sedang tidak aktif',
+      color: 'orange'
+    })
+    return
+  }
+  
+  // Confirm action
+  const confirmed = await $modal.confirm({
+    title: 'Ambil Nomor Antrian',
+    message: `Anda akan mengambil nomor antrian untuk <strong>${counter.name}</strong>. Lanjutkan?`,
+    type: 'info',
+    confirmText: 'Ya, Ambil Nomor',
+    cancelText: 'Batal'
+  })
+  
+  if (!confirmed) return
+  
+  isTakingNumber.value = true
+  
+  try {
+    const result = await takeQueueNumber(
+      locationId.value,
+      counterId,
+      authStore.user?.name,
+      authStore.user?.phone
+    )
+    
+    if (result.success && result.queueNumber) {
+      await $modal.alert({
+        title: 'Berhasil! 🎉',
+        message: `
+          <div class="text-center">
+            <p class="text-sm mb-2">Nomor antrian Anda:</p>
+            <p class="text-4xl font-bold text-primary-600 mb-2">${result.queueNumber}</p>
+            <p class="text-sm text-gray-500">Pantau giliran Anda di halaman "Antrian Saya"</p>
+          </div>
+        `,
+        type: 'success'
+      })
+      
+      // Navigate to my queue
+      navigateTo('/queue/me')
+    } else {
+      await $modal.alert({
+        title: 'Gagal',
+        message: result.error || 'Gagal mengambil nomor antrian',
+        type: 'error'
+      })
+    }
+  } catch (error: any) {
+    await $modal.alert({
+      title: 'Error',
+      message: error.message || 'Terjadi kesalahan',
+      type: 'error'
+    })
+  } finally {
+    isTakingNumber.value = false
+  }
 }
 
-// Watch for counter selection changes
-watch(selectedCounter, () => {
-  calculateEstimatedWaitTime()
+const goBack = () => {
+  router.back()
+}
+
+// Lifecycle
+onMounted(() => {
+  loadLocationData()
+})
+
+// Auto-refresh every 15 seconds
+let refreshInterval: ReturnType<typeof setInterval> | null = null
+
+onMounted(() => {
+  refreshInterval = setInterval(loadLocationData, 15000)
+})
+
+onUnmounted(() => {
+  if (refreshInterval) {
+    clearInterval(refreshInterval)
+  }
 })
 
 // SEO
 useHead({
-  title: `${location.value?.name || 'Location'} - Get Your Ticket | Waitless`,
-  meta: [
-    { name: 'description', content: `Get your digital queue ticket for ${location.value?.name}. Skip the line and track your queue position in real-time.` }
-  ]
+  title: computed(() => location.value ? `${location.value.name} - Ambil Antrian` : 'Ambil Antrian')
 })
 </script>
+
+<template>
+  <div class="min-h-screen bg-surface-100 pb-20">
+    <!-- Header -->
+    <header class="bg-white shadow-xs px-4 py-4 sticky top-0 z-10">
+      <div class="flex items-center gap-3">
+        <button
+          class="w-8 h-11 flex items-center justify-center -ml-2"
+          @click="goBack"
+        >
+          <svg
+            class="w-4 h-[18px] text-surface-600"
+            viewBox="0 0 16 18"
+            fill="currentColor"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path d="M0.330444 8.20547C-0.109009 8.64492 -0.109009 9.35859 0.330444 9.79805L5.95544 15.423C6.3949 15.8625 7.10857 15.8625 7.54802 15.423C7.98748 14.9836 7.98748 14.2699 7.54802 13.8305L3.83904 10.125H14.625C15.2472 10.125 15.75 9.62227 15.75 9C15.75 8.37774 15.2472 7.875 14.625 7.875H3.84255L7.54451 4.16953C7.98396 3.73008 7.98396 3.01641 7.54451 2.57695C7.10505 2.1375 6.39138 2.1375 5.95193 2.57695L0.326929 8.20195L0.330444 8.20547Z"/>
+          </svg>
+        </button>
+        <div class="flex-1 min-w-0">
+          <h1 class="text-lg font-semibold text-surface-900 truncate">
+            Ambil Antrian
+          </h1>
+          <p class="text-sm text-surface-500 truncate">
+            {{ location?.name || 'Memuat...' }}
+          </p>
+        </div>
+        <div class="flex items-center gap-3">
+          <!-- Notification Icon with Badge -->
+          <button class="relative">
+            <svg
+              class="w-4 h-[18px] text-surface-600"
+              viewBox="0 0 16 18"
+              fill="currentColor"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path d="M7.87495 0C7.25268 0 6.74995 0.502734 6.74995 1.125V1.8C4.18365 2.32031 2.25006 4.59141 2.25006 7.3125V7.97344C2.25006 9.62578 1.64186 11.2219 0.544981 12.4594L0.284825 12.7512C-0.0104874 13.0816 -0.0807999 13.5563 0.098497 13.9605C0.277794 14.3648 0.682091 14.625 1.12506 14.625H14.6251C15.068 14.625 15.4688 14.3648 15.6516 13.9605C15.8344 13.5563 15.7606 13.0816 15.4653 12.7512L15.2051 12.4594C14.1083 11.2219 13.5001 9.6293 13.5001 7.97344V7.3125C13.5001 4.59141 11.5665 2.32031 9.00006 1.8V1.125C9.00006 0.502734 8.49732 0 7.87506 0Z"/>
+            </svg>
+          </button>
+          <!-- Avatar -->
+          <NuxtLink 
+            :to="authStore.isAuthenticated ? '/profile' : '/login'"
+            class="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center"
+          >
+            <span class="text-primary-600 text-sm font-bold">
+              {{ authStore.user?.name?.charAt(0).toUpperCase() || '?' }}
+            </span>
+          </NuxtLink>
+        </div>
+      </div>
+    </header>
+
+    <!-- Loading State -->
+    <div v-if="isLoading" class="flex items-center justify-center py-16">
+      <div class="text-center">
+        <div class="animate-spin h-8 w-8 border-4 border-primary-600 border-t-transparent rounded-full mx-auto mb-4"></div>
+        <p class="text-surface-600">Memuat data lokasi...</p>
+      </div>
+    </div>
+
+    <template v-else-if="location">
+      <!-- Location Info -->
+      <div class="px-4 pt-4">
+        <div class="bg-white rounded-2xl shadow-xs p-4">
+          <h2 class="text-lg font-semibold text-surface-900 mb-1">
+            {{ location.name }}
+          </h2>
+          <p class="text-sm text-surface-500 mb-4">
+            {{ location.address }}
+          </p>
+          <StatusBadge :status="location.status" :text="location.statusText" />
+          <p class="text-sm text-surface-600 mt-3">
+            Pilih layanan yang mau kamu antre.
+          </p>
+        </div>
+      </div>
+
+      <!-- Counters List -->
+      <div class="px-4 pt-6">
+        <div class="mb-4">
+          <h2 class="text-lg font-semibold text-surface-900 mb-1">
+            Pilih Layanan
+          </h2>
+          <p class="text-sm text-surface-500">
+            Tempat ini punya {{ counters.length }} loket / jenis layanan
+          </p>
+        </div>
+
+        <!-- Empty State -->
+        <div v-if="counters.length === 0" class="text-center py-8 bg-white rounded-2xl">
+          <svg class="w-12 h-12 text-surface-300 mx-auto mb-3" fill="currentColor" viewBox="0 0 20 20">
+            <path fill-rule="evenodd" d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm3 1h6v4H7V5zm6 6H7v2h6v-2z" clip-rule="evenodd" />
+          </svg>
+          <p class="text-surface-600">Tidak ada loket tersedia</p>
+        </div>
+
+        <div v-else class="space-y-3">
+          <div
+            v-for="counter in counters"
+            :key="counter.id"
+            class="bg-white rounded-2xl shadow-xs p-4"
+          >
+            <div class="flex items-start justify-between gap-4">
+              <div class="flex-1 min-w-0">
+                <h3 class="text-base font-medium text-surface-900 mb-1">
+                  {{ counter.name }}
+                </h3>
+                <p class="text-sm text-surface-500 mb-2">
+                  {{ counter.description || 'Layanan umum' }}
+                </p>
+                <p class="text-sm text-surface-600">
+                  <template v-if="counter.is_active">
+                    Antrian sekarang: {{ counter.waiting_count || 0 }} orang
+                  </template>
+                  <template v-else>
+                    <span class="text-danger-600">Tutup</span>
+                  </template>
+                </p>
+              </div>
+              <button
+                :disabled="!counter.is_active || isTakingNumber"
+                class="px-4 py-2 text-sm font-medium rounded-lg transition-colors whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
+                :class="counter.is_active 
+                  ? 'bg-success-600 text-white hover:bg-success-700' 
+                  : 'bg-surface-200 text-surface-500'"
+                @click="handleTakeNumber(counter.id)"
+              >
+                <template v-if="isTakingNumber">
+                  <span class="animate-pulse">Memproses...</span>
+                </template>
+                <template v-else>
+                  {{ counter.is_active ? 'Ambil Nomor' : 'Tidak tersedia' }}
+                </template>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Info -->
+        <div class="mt-6 px-2 space-y-0.5">
+          <p class="text-xs text-surface-500 leading-4">
+            • Nomor antrian hanya berlaku di cabang ini.
+          </p>
+          <p class="text-xs text-surface-500 leading-4">
+            • Kalau kamu tidak hadir saat dipanggil, nomor bisa ditahan oleh admin.
+          </p>
+        </div>
+      </div>
+    </template>
+
+    <!-- Bottom Navigation -->
+    <BottomNavigation />
+  </div>
+</template>

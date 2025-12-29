@@ -1,7 +1,7 @@
 <template>
   <LoginPage 
     type="admin" 
-    :show-location-select="true"
+    :show-location-select="false"
     :show-demo-credentials="true"
     demo-email="admin1@waitless.app"
     demo-password="admin123"

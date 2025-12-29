@@ -23,13 +23,14 @@ export interface TicketEventAttributes {
 export interface TicketEventCreationAttributes extends Optional<TicketEventAttributes, 'id' | 'created_at'> {}
 
 export class TicketEvent extends Model<TicketEventAttributes, TicketEventCreationAttributes> implements TicketEventAttributes {
-  public id!: number;
-  public ticket_id!: number;
-  public actor_id?: number;
-  public event_type!: EventType;
-  public note?: string;
+  // Use 'declare' to avoid shadowing Sequelize getters
+  declare id: number;
+  declare ticket_id: number;
+  declare actor_id?: number;
+  declare event_type: EventType;
+  declare note?: string;
 
-  public readonly created_at!: Date;
+  declare readonly created_at: Date;
 
   static associate(models: any): void {
     TicketEvent.belongsTo(models.Ticket, {
