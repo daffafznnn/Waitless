@@ -164,7 +164,7 @@ const sendNotificationHandler: JobHandler = async (payload: JobPayload): Promise
  */
 const updateCounterStatsHandler: JobHandler = async (payload: JobPayload): Promise<JobResult> => {
   try {
-    const { counterId, _date } = payload;
+    const { counterId } = payload;
     
     // TODO: Implement counter stats update
     // This could update cached stats or trigger summary recalculation

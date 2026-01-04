@@ -1,5 +1,6 @@
 /* FILE: src/server/db/index.ts */
 import { Sequelize, DataTypes, Transaction } from 'sequelize';
+import mysql2 from 'mysql2';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -16,6 +17,7 @@ export const sequelize = new Sequelize(
     host: dbConfig.host,
     port: dbConfig.port,
     dialect: dbConfig.dialect,
+    dialectModule: mysql2, // Explicitly provide the mysql2 module for Vercel bundling
     dialectOptions: dbConfig.dialectOptions,
     pool: dbConfig.pool,
     logging: dbConfig.logging,

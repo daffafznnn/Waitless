@@ -1,3 +1,5 @@
+import { debugAuthStorage } from '~/utils/auth-debug'
+
 export default defineNuxtPlugin(async () => {
   // Only run on client-side
   if (import.meta.server) return
@@ -5,23 +7,15 @@ export default defineNuxtPlugin(async () => {
   const { initializeAuth } = useAuth()
   const authStore = useAuthStore()
   
-  // Import debug utility
-  const { debugAuthStorage } = await import('~/utils/auth-debug')
+
   
   try {
-    // Debug current localStorage state
     debugAuthStorage()
-    
-    // First, try to load state from localStorage
-    console.log('Loading auth state from localStorage...')
     const loaded = authStore.loadFromStorage()
     
     if (loaded && authStore.user && authStore.isAuthenticated) {
-      console.log('Auth state restored from localStorage:', authStore.user.email)
       authStore.setInitialized(true)
       
-      // Optionally verify with server in background, but don't clear if fails
-      // This allows offline-first behavior
       try {
         await initializeAuth()
       } catch (error) {

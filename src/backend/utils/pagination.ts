@@ -89,40 +89,7 @@ export const createPaginatedResponse = <T>(
   };
 };
 
-/**
- * Validate and sanitize pagination parameters
- */
-export const validatePagination = (
-  page?: number | string,
-  limit?: number | string,
-  maxLimit: number = 100
-): { page: number; limit: number; offset: number } => {
-  // Sanitize and validate page
-  let validPage = 1;
-  if (page) {
-    const parsedPage = typeof page === 'string' ? parseInt(page) : page;
-    if (!isNaN(parsedPage) && parsedPage > 0) {
-      validPage = parsedPage;
-    }
-  }
 
-  // Sanitize and validate limit
-  let validLimit = 20;
-  if (limit) {
-    const parsedLimit = typeof limit === 'string' ? parseInt(limit) : limit;
-    if (!isNaN(parsedLimit) && parsedLimit > 0) {
-      validLimit = Math.min(parsedLimit, maxLimit);
-    }
-  }
-
-  const offset = (validPage - 1) * validLimit;
-
-  return {
-    page: validPage,
-    limit: validLimit,
-    offset,
-  };
-};
 
 /**
  * Get pagination links for API responses

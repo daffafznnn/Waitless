@@ -25,25 +25,25 @@
     "baseUrl": "./src",
     "paths": {
       "@/*": ["*"],
-      "@/server/*": ["server/*"]
+      "@/server/*": ["backend/*"]
     }
   },
   "include": [
-    "src/server/index.ts",
-    "src/server/config/**/*",
-    "src/server/db/**/*",
-    "src/server/models/**/*",
-    "src/server/routes/**/*",
-    "src/server/middleware/**/*",
-    "src/server/utils/**/*",
-    "src/server/jobs/**/*",
-    "src/server/services/**/*"
+    "src/backend/index.ts",
+    "src/backend/config/**/*",
+    "src/backend/db/**/*",
+    "src/backend/models/**/*",
+    "src/backend/routes/**/*",
+    "src/backend/middleware/**/*",
+    "src/backend/utils/**/*",
+    "src/backend/jobs/**/*",
+    "src/backend/services/**/*"
   ],
   "exclude": [
     "node_modules",
     "dist",
     "tests",
-    "src/server/tests/**/*",
+    "src/backend/tests/**/*",
     "src/server/api/**/*",
     "src/composables/**/*",
     "src/stores/**/*",

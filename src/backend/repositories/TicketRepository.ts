@@ -1,6 +1,8 @@
 /* FILE: src/server/repositories/TicketRepository.ts */
 import { Transaction, Op, fn, QueryTypes } from 'sequelize';
-import { Ticket, TicketAttributes, TicketCreationAttributes, TicketStatus } from '../models/ticket.model';
+import { Ticket, TicketStatus } from '../models/ticket.model';
+import type { TicketAttributes, TicketCreationAttributes } from '../models/ticket.model';
+import { TicketEvent } from '../models/ticket_event.model';
 import { Counter } from '../models/counter.model';
 import { User } from '../models/user.model';
 import { ServiceLocation } from '../models/service_location.model';
@@ -150,8 +152,7 @@ export class TicketRepository {
     limit: number = 50,
     transaction?: Transaction
   ): Promise<{ rows: Ticket[]; count: number }> {
-    // Import TicketEvent model for include
-    const { TicketEvent } = require('../models/ticket_event.model');
+    // Use imported TicketEvent model
     
     return Ticket.findAndCountAll({
       where: {

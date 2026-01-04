@@ -18,6 +18,8 @@ import { LocationMemberRepository } from '../repositories/LocationMemberReposito
 import { ServiceLocation } from '../models/service_location.model';
 import { Counter } from '../models/counter.model';
 import { User, Role } from '../models/user.model';
+import { Ticket } from '../models/ticket.model';
+import { TicketEvent } from '../models/ticket_event.model';
 import bcrypt from 'bcrypt';
 import { 
   NotFoundError, 
@@ -70,7 +72,7 @@ export class OwnerService extends BaseService {
 
     return this.withTransaction(async (t) => {
       await this.ensureIsOwner(validOwnerId, t);
-      await this.ensureLocationNameUnique(validOwnerId, locationData.name, undefined, t);
+      await this.ensureLocationNameUnique(validOwnerId, locationData.name, t);
 
       return this.locationRepository.create({
         owner_id: validOwnerId,
@@ -100,7 +102,7 @@ export class OwnerService extends BaseService {
       this.ensureOwnership(location, validOwnerId);
 
       if (updates.name && updates.name !== location.name) {
-        await this.ensureLocationNameUnique(validOwnerId, updates.name, validLocationId, t);
+        await this.ensureLocationNameUnique(validOwnerId, updates.name, t);
       }
 
       const updateData = this.buildLocationUpdateData(updates);
@@ -190,8 +192,7 @@ export class OwnerService extends BaseService {
     
     const locations = await this.locationRepository.findByOwnerId(validOwnerId);
     
-    // Import Ticket model
-    const { Ticket } = require('../models/ticket.model');
+    // Use imported Ticket model
     
     const locationStats = await Promise.all(
       locations.map(async (location) => {
@@ -316,9 +317,7 @@ export class OwnerService extends BaseService {
       }
     }
     
-    // Import required models
-    const { TicketEvent } = require('../models/ticket_event.model');
-    const { Ticket } = require('../models/ticket.model');
+    // Use imported models
     
     // Build where clause
     const whereClause: any = {
@@ -696,7 +695,6 @@ export class OwnerService extends BaseService {
   private async ensureLocationNameUnique(
     ownerId: number,
     name: string,
-    excludeId?: number,
     t?: Transaction
   ): Promise<void> {
     const exists = await this.locationRepository.existsForOwner(ownerId, name, t);
@@ -738,15 +736,7 @@ export class OwnerService extends BaseService {
     return { ownerLocationIds, relevantMemberships };
   }
 
-  private getEmptySummary() {
-    return {
-      total_issued: 0,
-      total_done: 0,
-      total_hold: 0,
-      total_cancel: 0,
-      avg_service_seconds: 0,
-    };
-  }
+
 
   private calculateDashboardTotals(locationStats: any[]) {
     return locationStats.reduce(

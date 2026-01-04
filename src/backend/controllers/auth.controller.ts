@@ -1,5 +1,6 @@
 /* FILE: src/server/controllers/auth.controller.ts */
-import { Request, Response } from 'express';
+import type { Request, Response } from 'express';
+import jwt from 'jsonwebtoken';
 import { z } from 'zod';
 import { AuthService } from '../services/AuthService';
 import { Role } from '../models/user.model';
@@ -339,7 +340,6 @@ export const setToken = async (req: Request, res: Response): Promise<void> => {
     }
 
     // Verify token is valid by decoding it
-    const jwt = require('jsonwebtoken');
     const JWT_SECRET = process.env.JWT_SECRET || 'waitless-jwt-secret-key';
     
     try {

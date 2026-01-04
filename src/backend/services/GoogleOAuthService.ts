@@ -65,11 +65,11 @@ export class GoogleOAuthService {
     });
 
     if (!response.ok) {
-      const error = await response.json();
+      const error: any = await response.json();
       throw new Error(error.error_description || 'Failed to exchange code for tokens');
     }
 
-    return response.json();
+    return response.json() as Promise<GoogleTokenResponse>;
   }
 
   /**
@@ -86,7 +86,7 @@ export class GoogleOAuthService {
       throw new Error('Failed to get user info from Google');
     }
 
-    return response.json();
+    return response.json() as Promise<GoogleUserInfo>;
   }
 
   /**

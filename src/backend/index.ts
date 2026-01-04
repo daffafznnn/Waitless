@@ -93,25 +93,38 @@ app.use((error: any, _req: express.Request, res: express.Response, _next: expres
     res.status(500).json({
       ok: false,
       error: 'Internal server error',
-      message: process.env.NODE_ENV === 'development' ? error.message : 'Something went wrong',
+      message: error.message, // Temporarily expose error for debugging
+      stack: error.stack, // Temporarily expose stack for debugging
     });
   }
 });
 
-async function startServer(): Promise<void> {
+// Export bootstrap function for serverless/wrapper usage
+export async function bootstrap(options: { enableJobs?: boolean } = {}) {
   try {
-    console.log('🔗 Connecting to database...');
+    // Ensure DB is connected (Sequelize handles connection pooling)
     await connectDatabase();
-    console.log('✅ Database connected successfully');
+    console.log('✅ Database connected');
 
-    console.log('📅 Starting job scheduler...');
-    const jobScheduler = JobScheduler.getInstance();
-    jobScheduler.startAllJobs();
-    console.log('✅ Job scheduler started');
+    if (options.enableJobs) {
+      console.log('📅 Starting job scheduler...');
+      const jobScheduler = JobScheduler.getInstance();
+      jobScheduler.startAllJobs();
+      console.log('✅ Job scheduler started');
 
-    console.log('⚙️ Initializing job queue worker...');
-    initializeQueueWorker();
-    console.log('✅ Job queue worker started');
+      console.log('⚙️ Initializing job queue worker...');
+      initializeQueueWorker();
+      console.log('✅ Job queue worker started');
+    }
+  } catch (error) {
+    console.error('❌ Bootstrap failed:', error);
+    throw error;
+  }
+}
+
+export async function startServer(): Promise<void> {
+  try {
+    await bootstrap({ enableJobs: true });
 
     const server = app.listen(Number(PORT), HOST, () => {
       console.log(`🚀 Waitless API Server running on ${HOST}:${PORT}`);
@@ -128,10 +141,8 @@ async function startServer(): Promise<void> {
     const gracefulShutdown = async (signal: string) => {
       console.log(`\n⚡ Received ${signal}. Starting graceful shutdown...`);
       
-      // Stop job scheduler
+      const jobScheduler = JobScheduler.getInstance();
       jobScheduler.stopAllJobs();
-      
-      // Shutdown queue worker gracefully
       await shutdownQueueWorker(5000);
       
       server.close(() => {
@@ -149,8 +160,21 @@ async function startServer(): Promise<void> {
   }
 }
 
-if (require.main === module) {
-  startServer();
+// Note: In local development with tsx or node, this file can be run directly.
+// However, in Vercel/Nitro environment (ESM), require.main is not available.
+// We rely on the exported 'app' being used by the Nitro wrapper.
+// To run locally: use the scripts defined in package.json which use 'tsx' or 'node'.
+
+// Manual check for direct execution if needed in future (using import.meta.url)
+// but for now, we leave it to the wrapper.
+
+// Check if running directly (dev) vs imported (prod/lambda)
+// Safe check for CommonJS environment (local dev)
+if (typeof require !== 'undefined' && require.main === module) {
+  startServer().catch((error) => {
+    console.error('Failed to start server:', error);
+    process.exit(1);
+  });
 }
 
 export { app };

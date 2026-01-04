@@ -9,6 +9,8 @@ export default defineNuxtConfig({
     host: '0.0.0.0' // Enable LAN access
   },
 
+
+
   // Modules
   modules: [
     '@nuxtjs/tailwindcss',
@@ -100,12 +102,12 @@ export default defineNuxtConfig({
   // Route Rules for SSR/SPA
   routeRules: {
     // Homepage rendered on client-side (disable prerendering)
-    '/': { spa: true },
+    '/': { ssr: false },
     // Admin dashboard renders only on client-side
-    '/admin/**': { spa: true },
-    '/owner/**': { spa: true },
+    '/admin/**': { ssr: false },
+    '/owner/**': { ssr: false },
     // Hybrid rendering for queue pages
-    '/queue/**': { spa: true }
+    '/queue/**': { ssr: false }
   },
 
   // Experimental features
@@ -179,7 +181,7 @@ export default defineNuxtConfig({
       
       // Suppress import analysis warnings
       if (isClient) {
-        config.onwarn = (warning, warn) => {
+        (config as any).onwarn = (warning: any, warn: any) => {
           if (warning.code === 'UNRESOLVED_IMPORT') return
           if (warning.message.includes('#app-manifest')) return
           if (warning.message.includes('postcss.config.js')) return

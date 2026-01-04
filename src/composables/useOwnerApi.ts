@@ -7,41 +7,9 @@ import type {
 import type { OwnerDashboard, LocationAnalytics } from '~/stores/business'
 
 // Request types for owner operations
-export interface CreateLocationRequest {
-  name: string
-  address?: string
-  city?: string
-  lat?: number
-  lng?: number
-}
 
-export interface UpdateLocationRequest {
-  name?: string
-  address?: string
-  city?: string
-  lat?: number
-  lng?: number
-  isActive?: boolean
-}
 
-export interface CreateCounterRequest {
-  name: string
-  description?: string
-  prefix: string
-  openTime?: string
-  closeTime?: string
-  capacityPerDay?: number
-}
 
-export interface UpdateCounterRequest {
-  name?: string
-  description?: string
-  prefix?: string
-  openTime?: string
-  closeTime?: string
-  capacityPerDay?: number
-  isActive?: boolean
-}
 
 export interface StaffMember {
   id: number

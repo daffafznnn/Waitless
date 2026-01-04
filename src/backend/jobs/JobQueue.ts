@@ -11,7 +11,7 @@
  */
 
 import { v4 as uuidv4 } from 'uuid';
-import { JobPayload, JobPriority, JobStatus, QueueJob, JobResult } from '../types';
+import { JobPayload, JobPriority, QueueJob, JobResult } from '../types';
 
 // Priority weights (higher = processed first)
 const PRIORITY_WEIGHTS: Record<JobPriority, number> = {
