@@ -40,6 +40,7 @@ interface AuthState {
   isAuthenticated: boolean
   initialized: boolean
   loading: boolean
+  loginError: string | null // Track login errors to prevent redirect
   errors: Record<string, string | null>
 }
 
@@ -49,6 +50,7 @@ export const useAuthStore = defineStore('auth', {
     isAuthenticated: false,
     initialized: false,
     loading: false,
+    loginError: null,
     errors: {}
   }),
 
@@ -163,6 +165,7 @@ export const useAuthStore = defineStore('auth', {
       this.user = null
       this.isAuthenticated = false
       this.loading = false
+      this.loginError = null
       this.errors = {}
       clearStorage()
     },
@@ -173,6 +176,7 @@ export const useAuthStore = defineStore('auth', {
       this.isAuthenticated = false
       this.initialized = false
       this.loading = false
+      this.loginError = null
       this.errors = {}
       clearStorage()
     },

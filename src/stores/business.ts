@@ -11,12 +11,14 @@ export interface OwnerDashboard {
   date: string
   locationsCount: number
   activeLocationsCount: number
+  peakHour?: string
   totals: {
     totalIssued: number
     totalDone: number
     totalHold: number
     totalCancel: number
     avgServiceSeconds: number
+    avgWaitSeconds?: number
     completionRate: number
   }
   locations: Array<{
@@ -32,6 +34,7 @@ export interface OwnerDashboard {
       total_hold: number
       total_cancel: number
       avg_service_seconds: number
+      avg_wait_seconds?: number
     }
   }>
 }

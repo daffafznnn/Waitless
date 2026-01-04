@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
-import { TicketCard, BottomNavigation } from '@/components/visitor'
+import { TicketCard, BottomNavigation, VisitorHeader } from '@/components/visitor'
 import type { VisitorTicket } from '@/composables/useVisitorApi'
 
 definePageMeta({
@@ -66,24 +66,82 @@ const loadTickets = async () => {
   }
 }
 
-// Handle ticket action (for serving status)
+// Handle ticket action (view detail)
 const handleTicketAction = async (index: number) => {
   const ticket = currentTabTickets.value[index]
   if (!ticket) return
   
-  if (ticket.status === 'serving') {
-    await $modal.alert({
-      title: 'Sedang Dipanggil',
-      message: `Nomor antrian <strong>${ticket.queueNumber}</strong> sedang dipanggil. Silakan menuju loket <strong>${ticket.counterName}</strong>.`,
-      type: 'info'
-    })
-  } else if (ticket.status === 'called') {
-    await $modal.alert({
-      title: 'Nomor Anda Dipanggil!',
-      message: `Segera menuju loket <strong>${ticket.counterName}</strong> untuk dilayani.`,
-      type: 'warning'
-    })
+  // Show detailed modal for ALL statuses
+  await showTicketDetailModal(ticket)
+}
+
+// Show ticket detail modal with ETA info
+const showTicketDetailModal = async (ticket: VisitorTicket) => {
+  // Fetch ETA info for waiting tickets
+  let etaInfo = ''
+  let positionInfo = ''
+  let holdReasonInfo = ''
+  
+  if (ticket.status === 'waiting') {
+    try {
+      const { getTicketDetail } = useVisitorApi()
+      const detail = await getTicketDetail(ticket.id)
+      if (detail.queueInfo) {
+        const { position, totalWaiting, estimatedMinutes } = detail.queueInfo
+        positionInfo = `<p><strong>Posisi Antrian:</strong> #${position} dari ${totalWaiting + position} orang</p>`
+        if (estimatedMinutes > 0) {
+          etaInfo = `<p><strong>Estimasi Waktu:</strong> ~${estimatedMinutes} menit</p>`
+        }
+      }
+    } catch {
+      // Fallback if API fails
+    }
   }
+  
+  // For on_hold tickets, try to get hold reason from raw ticket data
+  if (ticket.status === 'on_hold' && (ticket as any).hold_reason) {
+    holdReasonInfo = `<p class="mt-2 p-2 bg-orange-50 rounded text-orange-800"><strong>Alasan ditahan:</strong> ${(ticket as any).hold_reason}</p>`
+  }
+  
+  // Build status-specific message
+  let statusMessage = ''
+  if (ticket.status === 'serving') {
+    statusMessage = '<p class="text-success-600 font-medium">Nomor Anda sedang dipanggil! Segera ke loket.</p>'
+  } else if (ticket.status === 'called') {
+    statusMessage = '<p class="text-warning-600 font-medium">⚡ Bersiap! Nomor Anda akan segera dipanggil.</p>'
+  } else if (ticket.status === 'on_hold') {
+    statusMessage = `<p class="text-orange-600 font-medium">Antrian Anda ditahan. Hubungi petugas.</p>${holdReasonInfo}`
+  } else if (ticket.status === 'completed') {
+    statusMessage = '<p class="text-surface-500">✓ Layanan telah selesai.</p>'
+  } else if (ticket.status === 'cancelled') {
+    statusMessage = '<p class="text-danger-500">✗ Antrian dibatalkan.</p>'
+  }
+  
+  await $modal.alert({
+    title: `Tiket ${ticket.queueNumber}`,
+    message: `
+      <div class="space-y-3 text-left">
+        <div class="text-center py-4 bg-primary-50 rounded-xl mb-4">
+          <p class="text-5xl font-bold text-primary-600">${ticket.queueNumber}</p>
+          <p class="text-sm text-primary-700 mt-2">${ticket.statusText}</p>
+        </div>
+        ${statusMessage}
+        <div class="space-y-2 text-sm">
+          <p><strong>Lokasi:</strong> ${ticket.locationName}</p>
+          <p><strong>Loket:</strong> ${ticket.counterName}</p>
+          ${positionInfo}
+          ${etaInfo}
+          <p><strong>Diambil:</strong> ${ticket.takenAt}</p>
+        </div>
+      </div>
+    `,
+    type: 'info'
+  })
+}
+
+// Handle ticket detail (alias for backward compat)
+const handleTicketDetail = (index: number) => {
+  handleTicketAction(index)
 }
 
 // Handle cancel ticket
@@ -125,27 +183,6 @@ const handleCancelTicket = async (index: number) => {
       type: 'error'
     })
   }
-}
-
-// Handle ticket detail
-const handleTicketDetail = (index: number) => {
-  const ticket = currentTabTickets.value[index]
-  if (!ticket) return
-  
-  // Show ticket detail modal
-  $modal.alert({
-    title: `Tiket ${ticket.queueNumber}`,
-    message: `
-      <div class="space-y-2 text-left">
-        <p><strong>Lokasi:</strong> ${ticket.locationName}</p>
-        <p><strong>Loket:</strong> ${ticket.counterName}</p>
-        <p><strong>Status:</strong> ${ticket.statusText}</p>
-        <p><strong>Diambil:</strong> ${ticket.takenAt}</p>
-        ${ticket.position ? `<p><strong>Posisi:</strong> ${ticket.position} dalam antrian</p>` : ''}
-      </div>
-    `,
-    type: 'info'
-  })
 }
 
 const setActiveTab = (tab: 'active' | 'on-hold' | 'history') => {
@@ -191,16 +228,13 @@ useHead({
 <template>
   <div class="min-h-screen bg-surface-100 pb-20">
     <!-- Header -->
-    <header class="bg-white shadow-xs px-4 py-4 sticky top-0 z-10">
-      <div class="flex items-center justify-between gap-4">
-        <div class="flex-1 min-w-0">
-          <h1 class="text-lg font-semibold text-surface-900 mb-0.5">
-            Antrian Saya
-          </h1>
-          <p class="text-xs text-surface-500 leading-4">
-            Lihat antrean yang sedang berjalan dan riwayatnya.
-          </p>
-        </div>
+    <VisitorHeader
+      title="Antrian Saya"
+      subtitle="Lihat antrean yang sedang berjalan dan riwayatnya."
+      :show-notification="false"
+      :show-profile="false"
+    >
+      <template #actions>
         <button class="flex-shrink-0" @click="loadTickets">
           <svg
             class="w-4 h-[18px] text-surface-400 hover:text-primary-600 transition-colors"
@@ -209,11 +243,11 @@ useHead({
             fill="currentColor"
             xmlns="http://www.w3.org/2000/svg"
           >
-            <path d="M7.87495 0C7.25268 0 6.74995 0.502734 6.74995 1.125V1.7543C4.20112 2.15859 2.24995 4.36641 2.24995 7.03125V8.20547C2.24995 9.80156 1.70502 11.352 0.710103 12.5965L0.186274 13.2539C-0.0176318 13.507 -0.0563037 13.8551 0.0843213 14.1469C0.224946 14.4387 0.520259 14.625 0.843696 14.625H14.9062C15.2296 14.625 15.5249 14.4387 15.6656 14.1469C15.8062 13.8551 15.7675 13.507 15.5636 13.2539L15.0398 12.6C14.0449 11.352 13.4999 9.80156 13.4999 8.20547V7.03125C13.4999 4.36641 11.5488 2.15859 8.99995 1.7543V1.125C8.99995 0.502734 8.49721 0 7.87495 0Z"/>
+            <path d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" stroke="currentColor"/>
           </svg>
         </button>
-      </div>
-    </header>
+      </template>
+    </VisitorHeader>
 
     <!-- Not Logged In State -->
     <div v-if="!authStore.isAuthenticated" class="px-4 pt-8">

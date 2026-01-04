@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { StatusBadge, CounterCard, BottomNavigation } from '@/components/visitor'
+import { StatusBadge, CounterCard, BottomNavigation, VisitorHeader } from '@/components/visitor'
 import type { Counter } from '~/types'
 
 definePageMeta({
@@ -26,7 +26,7 @@ const location = ref<{
   status: 'open' | 'closed'
   statusText: string
 } | null>(null)
-const counters = ref<(Counter & { waiting_count?: number; current_serving?: string })[]>([])
+const counters = ref<(Counter & { waiting_count?: number; current_serving?: string; total_today?: number })[]>([])
 
 // Load location data
 const loadLocationData = async () => {
@@ -170,53 +170,14 @@ useHead({
 <template>
   <div class="min-h-screen bg-surface-100 pb-20">
     <!-- Header -->
-    <header class="bg-white shadow-xs px-4 py-4 sticky top-0 z-10">
-      <div class="flex items-center gap-3">
-        <button
-          class="w-8 h-11 flex items-center justify-center -ml-2"
-          @click="goBack"
-        >
-          <svg
-            class="w-4 h-[18px] text-surface-600"
-            viewBox="0 0 16 18"
-            fill="currentColor"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            <path d="M0.330444 8.20547C-0.109009 8.64492 -0.109009 9.35859 0.330444 9.79805L5.95544 15.423C6.3949 15.8625 7.10857 15.8625 7.54802 15.423C7.98748 14.9836 7.98748 14.2699 7.54802 13.8305L3.83904 10.125H14.625C15.2472 10.125 15.75 9.62227 15.75 9C15.75 8.37774 15.2472 7.875 14.625 7.875H3.84255L7.54451 4.16953C7.98396 3.73008 7.98396 3.01641 7.54451 2.57695C7.10505 2.1375 6.39138 2.1375 5.95193 2.57695L0.326929 8.20195L0.330444 8.20547Z"/>
-          </svg>
-        </button>
-        <div class="flex-1 min-w-0">
-          <h1 class="text-lg font-semibold text-surface-900 truncate">
-            Ambil Antrian
-          </h1>
-          <p class="text-sm text-surface-500 truncate">
-            {{ location?.name || 'Memuat...' }}
-          </p>
-        </div>
-        <div class="flex items-center gap-3">
-          <!-- Notification Icon with Badge -->
-          <button class="relative">
-            <svg
-              class="w-4 h-[18px] text-surface-600"
-              viewBox="0 0 16 18"
-              fill="currentColor"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <path d="M7.87495 0C7.25268 0 6.74995 0.502734 6.74995 1.125V1.8C4.18365 2.32031 2.25006 4.59141 2.25006 7.3125V7.97344C2.25006 9.62578 1.64186 11.2219 0.544981 12.4594L0.284825 12.7512C-0.0104874 13.0816 -0.0807999 13.5563 0.098497 13.9605C0.277794 14.3648 0.682091 14.625 1.12506 14.625H14.6251C15.068 14.625 15.4688 14.3648 15.6516 13.9605C15.8344 13.5563 15.7606 13.0816 15.4653 12.7512L15.2051 12.4594C14.1083 11.2219 13.5001 9.6293 13.5001 7.97344V7.3125C13.5001 4.59141 11.5665 2.32031 9.00006 1.8V1.125C9.00006 0.502734 8.49732 0 7.87506 0Z"/>
-            </svg>
-          </button>
-          <!-- Avatar -->
-          <NuxtLink 
-            :to="authStore.isAuthenticated ? '/profile' : '/login'"
-            class="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center"
-          >
-            <span class="text-primary-600 text-sm font-bold">
-              {{ authStore.user?.name?.charAt(0).toUpperCase() || '?' }}
-            </span>
-          </NuxtLink>
-        </div>
-      </div>
-    </header>
+    <VisitorHeader
+      title="Ambil Antrian"
+      :subtitle="location?.name || 'Memuat...'"
+      show-back
+      :user-name="authStore.user?.name"
+      :is-authenticated="authStore.isAuthenticated"
+      @back="goBack"
+    />
 
     <!-- Loading State -->
     <div v-if="isLoading" class="flex items-center justify-center py-16">
@@ -273,17 +234,43 @@ useHead({
                 <h3 class="text-base font-medium text-surface-900 mb-1">
                   {{ counter.name }}
                 </h3>
-                <p class="text-sm text-surface-500 mb-2">
+                <p class="text-sm text-surface-500 mb-3">
                   {{ counter.description || 'Layanan umum' }}
                 </p>
-                <p class="text-sm text-surface-600">
-                  <template v-if="counter.is_active">
-                    Antrian sekarang: {{ counter.waiting_count || 0 }} orang
-                  </template>
-                  <template v-else>
-                    <span class="text-danger-600">Tutup</span>
-                  </template>
-                </p>
+                
+                <!-- Queue Stats -->
+                <template v-if="counter.is_active">
+                  <div class="flex flex-wrap gap-3 text-sm">
+                    <!-- Waiting count -->
+                    <div class="flex items-center gap-1.5">
+                      <span class="flex items-center justify-center w-5 h-5 bg-warning-100 text-warning-600 rounded">
+                        <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                          <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z"/>
+                        </svg>
+                      </span>
+                      <span class="font-medium text-surface-700">{{ counter.waiting_count || 0 }} menunggu</span>
+                    </div>
+                    
+                    <!-- Currently serving -->
+                    <div v-if="counter.current_serving" class="flex items-center gap-1.5">
+                      <span class="flex items-center justify-center w-5 h-5 bg-success-100 text-success-600 rounded">
+                        <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                          <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                        </svg>
+                      </span>
+                      <span class="text-success-700">Dilayani: <strong>{{ counter.current_serving }}</strong></span>
+                    </div>
+                    
+                    <!-- Total today -->
+                    <div v-if="counter.total_today" class="flex items-center gap-1.5 text-surface-500">
+                      <span class="text-xs">•</span>
+                      <span>{{ counter.total_today }} hari ini</span>
+                    </div>
+                  </div>
+                </template>
+                <template v-else>
+                  <span class="text-sm text-danger-600 font-medium">Tutup</span>
+                </template>
               </div>
               <button
                 :disabled="!counter.is_active || isTakingNumber"

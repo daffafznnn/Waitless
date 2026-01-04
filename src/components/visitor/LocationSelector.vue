@@ -2,9 +2,12 @@
 interface Props {
   location: string
   subtitle?: string
+  readonly?: boolean
 }
 
-defineProps<Props>()
+const props = withDefaults(defineProps<Props>(), {
+  readonly: false
+})
 
 const emit = defineEmits<{
   change: []
@@ -36,6 +39,7 @@ const emit = defineEmits<{
       </div>
 
       <button
+        v-if="!readonly"
         class="text-sm font-medium text-primary-600 hover:text-primary-700 transition-colors whitespace-nowrap"
         @click="emit('change')"
       >

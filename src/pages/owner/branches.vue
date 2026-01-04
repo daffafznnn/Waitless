@@ -495,7 +495,11 @@ const handleCounterSubmit = async (formData: any) => {
 }
 
 const confirmDeleteCounter = async (counter: Counter) => {
-  if (!confirm(`Hapus loket "${counter.name}"?`)) return
+  const { $modal } = useNuxtApp()
+  
+  const confirmed = await $modal.confirmDelete(`Hapus loket "${counter.name}"?`)
+  if (!confirmed) return
+  
   if (!selectedLocation.value) return
   
   try {

@@ -174,6 +174,18 @@ export class InvalidTicketStatusError extends BusinessLogicError {
 }
 
 /**
+ * Duplicate ticket error (409)
+ * Use when user already has an active ticket for the same counter
+ */
+export class DuplicateTicketError extends ConflictError {
+  constructor(counterName?: string) {
+    super(counterName 
+      ? `Anda sudah memiliki antrian aktif di loket ${counterName}` 
+      : 'Anda sudah memiliki antrian aktif di loket ini');
+  }
+}
+
+/**
  * Check if error is operational (expected) vs programming error
  */
 export function isOperationalError(error: Error): boolean {

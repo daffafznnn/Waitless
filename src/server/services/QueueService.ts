@@ -22,7 +22,8 @@ import {
   CapacityError,
   CounterClosedError,
   LocationClosedError,
-  InvalidTicketStatusError 
+  InvalidTicketStatusError,
+  DuplicateTicketError,
 } from '../types/errors';
 import { getJakartaTimeString, getJakartaDateString } from '../utils/datetime';
 import type { IssueTicketRequest, CallNextResponse } from '../types';
@@ -75,6 +76,18 @@ export class QueueService extends BaseService {
       const capacityStatus = await this.counterRepository.getCapacityStatus(validCounterId, today, t);
       if (capacityStatus.isAtCapacity) {
         throw new CapacityError();
+      }
+
+      // Check if user already has an active ticket for this counter today
+      // This enforces the rule: 1 user = 1 active ticket per counter
+      if (userId) {
+        const existingTicket = await this.ticketRepository.findActiveByUserAndCounter(
+          userId, validCounterId, today, t
+        );
+        if (existingTicket) {
+          const counterName = (existingTicket as any).counter?.name;
+          throw new DuplicateTicketError(counterName);
+        }
       }
 
       // Create ticket with automatic sequence generation

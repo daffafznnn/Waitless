@@ -9,7 +9,7 @@
  * - Extracted helper methods
  */
 
-import { Transaction } from 'sequelize';
+import { Transaction, Op } from 'sequelize';
 import { BaseService } from './BaseService';
 import { UserRepository } from '../repositories/UserRepository';
 import { LocationRepository } from '../repositories/LocationRepository';
@@ -17,7 +17,7 @@ import { SummaryRepository } from '../repositories/SummaryRepository';
 import { LocationMemberRepository } from '../repositories/LocationMemberRepository';
 import { ServiceLocation } from '../models/service_location.model';
 import { Counter } from '../models/counter.model';
-import { Role } from '../models/user.model';
+import { User, Role } from '../models/user.model';
 import bcrypt from 'bcrypt';
 import { 
   NotFoundError, 
@@ -182,7 +182,7 @@ export class OwnerService extends BaseService {
   }
 
   /**
-   * Get multi-location dashboard for owner
+   * Get multi-location dashboard for owner - Fetches real-time data from tickets
    */
   async getOwnerDashboard(ownerId: number, date?: string) {
     const validOwnerId = this.validateId(ownerId, 'Owner ID');
@@ -190,9 +190,38 @@ export class OwnerService extends BaseService {
     
     const locations = await this.locationRepository.findByOwnerId(validOwnerId);
     
+    // Import Ticket model
+    const { Ticket } = require('../models/ticket.model');
+    
     const locationStats = await Promise.all(
       locations.map(async (location) => {
-        const summary = await this.summaryRepository.findByLocationAndDate(location.id, targetDate);
+        // Fetch tickets directly for real-time data
+        const tickets = await Ticket.findAll({
+          where: {
+            location_id: location.id,
+            date_for: targetDate
+          },
+          attributes: ['id', 'status', 'started_at', 'finished_at', 'created_at']
+        });
+        
+        // Calculate stats from tickets
+        const totalIssued = tickets.length;
+        const totalDone = tickets.filter((t: any) => t.status === 'DONE').length;
+        const totalHold = tickets.filter((t: any) => t.status === 'HOLD').length;
+        const totalCancel = tickets.filter((t: any) => t.status === 'CANCELLED').length;
+        
+        // Calculate average service time for completed tickets
+        let avgServiceSeconds = 0;
+        const doneTickets = tickets.filter((t: any) => t.status === 'DONE' && t.started_at && t.finished_at);
+        if (doneTickets.length > 0) {
+          const totalServiceTime = doneTickets.reduce((acc: number, t: any) => {
+            const start = new Date(t.started_at).getTime();
+            const end = new Date(t.finished_at).getTime();
+            return acc + (end - start) / 1000;
+          }, 0);
+          avgServiceSeconds = Math.round(totalServiceTime / doneTickets.length);
+        }
+        
         return {
           location: {
             id: location.id,
@@ -200,7 +229,13 @@ export class OwnerService extends BaseService {
             city: location.city,
             isActive: location.is_active,
           },
-          summary: summary || this.getEmptySummary(),
+          summary: {
+            total_issued: totalIssued,
+            total_done: totalDone,
+            total_hold: totalHold,
+            total_cancel: totalCancel,
+            avg_service_seconds: avgServiceSeconds,
+          },
         };
       })
     );
@@ -250,6 +285,93 @@ export class OwnerService extends BaseService {
       generatedAt: new Date(),
       generatedBy: ownerId,
       reportType: 'location_performance',
+    };
+  }
+
+  /**
+   * Get all tickets for owner's locations in date range (for reports)
+   */
+  async getOwnerTickets(
+    ownerId: number,
+    startDate: string,
+    endDate: string,
+    locationId?: number,
+    status?: string
+  ) {
+    const validOwnerId = this.validateId(ownerId, 'Owner ID');
+    
+    // Get owner's locations
+    const locations = await this.locationRepository.findByOwnerId(validOwnerId);
+    if (locations.length === 0) {
+      return { tickets: [], counters: [], locations: [] };
+    }
+    
+    // Filter by specific location if provided
+    let targetLocations = locations;
+    if (locationId) {
+      const validLocationId = this.validateId(locationId, 'Location ID');
+      targetLocations = locations.filter(l => l.id === validLocationId);
+      if (targetLocations.length === 0) {
+        throw new ForbiddenError('Location not found or not owned by you');
+      }
+    }
+    
+    // Import required models
+    const { TicketEvent } = require('../models/ticket_event.model');
+    const { Ticket } = require('../models/ticket.model');
+    
+    // Build where clause
+    const whereClause: any = {
+      location_id: targetLocations.map(l => l.id),
+      date_for: {
+        [Op.between]: [startDate, endDate]
+      }
+    };
+    
+    if (status) {
+      whereClause.status = status;
+    }
+    
+    // Fetch tickets with relations
+    const tickets = await Ticket.findAll({
+      where: whereClause,
+      include: [
+        {
+          model: Counter,
+          as: 'counter',
+          attributes: ['id', 'name', 'prefix', 'location_id'],
+        },
+        {
+          model: User,
+          as: 'user',
+          attributes: ['id', 'name', 'phone'],
+        },
+        {
+          model: TicketEvent,
+          as: 'events',
+          attributes: ['id', 'event_type', 'actor_id', 'note', 'created_at'],
+          include: [{
+            model: User,
+            as: 'actor',
+            attributes: ['id', 'name'],
+          }],
+        },
+      ],
+      order: [['created_at', 'DESC']],
+      limit: 1000, // Safety limit
+    });
+    
+    // Get all counters for owner's locations
+    const counters: Counter[] = [];
+    for (const location of targetLocations) {
+      const locationCounters = await this.locationRepository.getCountersByLocationId(location.id);
+      counters.push(...locationCounters);
+    }
+    
+    return {
+      tickets,
+      counters,
+      locations: targetLocations.map(l => ({ id: l.id, name: l.name, city: l.city })),
     };
   }
 

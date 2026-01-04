@@ -5,11 +5,11 @@ import { QueueService } from '../services/QueueService';
 
 const queueService = new QueueService();
 
-// Validation schemas
+// Validation schemas - using coerce to handle both string and number inputs
 const issueTicketSchema = z.object({
-  locationId: z.number().int().positive('Location ID must be a positive integer'),
-  counterId: z.number().int().positive('Counter ID must be a positive integer'),
-  userId: z.number().int().positive().optional(),
+  locationId: z.coerce.number().int().positive('Location ID must be a positive integer'),
+  counterId: z.coerce.number().int().positive('Counter ID must be a positive integer'),
+  userId: z.coerce.number().int().positive().optional(),
   dateFor: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be in YYYY-MM-DD format').optional(),
 });
 

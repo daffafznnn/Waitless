@@ -84,11 +84,11 @@ export const useVisitorApi = () => {
   }
   
   /**
-   * Get location detail with counters
+   * Get location detail with counters and queue statistics
    */
   const getLocationDetail = async (locationId: number): Promise<{
     location: VisitorLocation | null
-    counters: Counter[]
+    counters: (Counter & { waiting_count?: number; current_serving?: string; total_today?: number })[]
   }> => {
     try {
       const [locResponse, countersResponse] = await Promise.all([
@@ -105,6 +105,27 @@ export const useVisitorApi = () => {
       
       // Filter out inactive counters - only show active counters to visitors
       const activeCounters = allCounters.filter((counter: Counter) => counter.is_active === true)
+      
+      // Fetch queue status for each active counter
+      const countersWithStats = await Promise.all(
+        activeCounters.map(async (counter: Counter) => {
+          try {
+            const statusResponse = await queueApi.getQueueStatus(counter.id)
+            if (statusResponse.ok && statusResponse.data?.status) {
+              const stats = statusResponse.data.status as any // API returns different structure than type
+              return {
+                ...counter,
+                waiting_count: stats.waiting || 0,
+                current_serving: stats.currentServing?.queue_number || stats.nextWaiting?.queue_number || undefined,
+                total_today: stats.total || 0
+              }
+            }
+          } catch (err) {
+            console.warn(`Failed to fetch queue status for counter ${counter.id}:`, err)
+          }
+          return { ...counter, waiting_count: 0, current_serving: undefined, total_today: 0 }
+        })
+      )
       
       // Use is_active as the source of truth for location status
       const isLocationOpen = loc.is_active ?? true
@@ -124,9 +145,9 @@ export const useVisitorApi = () => {
           queueInfo: !hasActiveCounters ? 'Tidak ada loket tersedia' : '',
           actionText: '',
           actionType: effectivelyOpen ? 'primary' : 'disabled',
-          counters: activeCounters
+          counters: countersWithStats
         },
-        counters: activeCounters
+        counters: countersWithStats
       }
     } catch (error) {
       console.error('Error fetching location detail:', error)
@@ -218,7 +239,8 @@ export const useVisitorApi = () => {
           statusText: getStatusText(mappedStatus),
           queueInfo: getQueueInfo({ ...ticket, status: mappedStatus }),
           takenAt: formatTime(ticket.created_at),
-          position: ticket.position
+          position: ticket.position,
+          hold_reason: ticket.hold_reason || null // Include hold reason for on_hold tickets
         }
       })
     } catch (error) {
@@ -284,12 +306,50 @@ export const useVisitorApi = () => {
       minute: '2-digit'
     })
   }
+
+  /**
+   * Get detailed ticket info with ETA and queue position
+   */
+  const getTicketDetail = async (ticketId: number): Promise<{
+    ticket: VisitorTicket | null
+    queueInfo: {
+      position: number
+      totalWaiting: number
+      estimatedMinutes: number
+      currentlyServing: string | null
+    } | null
+  }> => {
+    try {
+      // Get ticket estimate which includes position
+      const estimateResponse = await queueApi.getEstimatedWaitTime(ticketId)
+      
+      if (!estimateResponse.ok || !estimateResponse.data?.estimate) {
+        return { ticket: null, queueInfo: null }
+      }
+      
+      const estimate = estimateResponse.data.estimate
+      
+      return {
+        ticket: null, // Will be populated by the caller from existing data
+        queueInfo: {
+          position: estimate.position || 1,
+          totalWaiting: estimate.waitingAhead || 0,
+          estimatedMinutes: estimate.estimatedMinutes || 5,
+          currentlyServing: null // Could be fetched separately if needed
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching ticket detail:', error)
+      return { ticket: null, queueInfo: null }
+    }
+  }
   
   return {
     getPublicLocations,
     getLocationDetail,
     takeQueueNumber,
     getMyTickets,
-    cancelMyTicket
+    cancelMyTicket,
+    getTicketDetail
   }
 }

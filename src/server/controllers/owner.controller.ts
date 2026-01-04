@@ -181,6 +181,41 @@ export const getOwnerDashboard = async (req: Request, res: Response): Promise<vo
 };
 
 /**
+ * Get owner's tickets for reports (across all locations)
+ */
+export const getOwnerTickets = async (req: Request, res: Response): Promise<void> => {
+  const userId = req.user?.userId;
+  const { startDate, endDate, locationId, status } = req.query;
+  
+  if (!userId) {
+    sendErrorResponse(res, 'User not authenticated', 401);
+    return;
+  }
+
+  if (!startDate || !endDate) {
+    sendErrorResponse(res, 'Start date and end date are required', 400);
+    return;
+  }
+
+  try {
+    const result = await ownerService.getOwnerTickets(
+      userId,
+      startDate as string,
+      endDate as string,
+      locationId ? parseInt(locationId as string, 10) : undefined,
+      status as string | undefined
+    );
+    sendSuccess(res, result);
+  } catch (error: any) {
+    if (error.message.includes('not found') || error.message.includes('not owned')) {
+      sendErrorResponse(res, error.message, 404);
+    } else {
+      throw error;
+    }
+  }
+};
+
+/**
  * Get location analytics for a date range
  */
 export const getLocationAnalytics = async (req: Request, res: Response): Promise<void> => {

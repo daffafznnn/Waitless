@@ -10,6 +10,7 @@ export const useAuth = () => {
     try {
       authStore.setLoading(true)
       authStore.clearError('login')
+      authStore.loginError = null // Clear any previous login error
       
       const response = await authApi.login(credentials)
       
@@ -18,11 +19,19 @@ export const useAuth = () => {
         authStore.setAuthenticated(true)
         return response.data
       } else {
+        // Clear any stale auth state on login failure
+        authStore.loginError = response.error || 'Login gagal'
         authStore.setError('login', response.error || 'Login failed')
+        authStore.setAuthenticated(false)
+        authStore.user = null
         throw new Error(response.error || 'Login failed')
       }
     } catch (error: any) {
+      // Ensure auth state is cleared on any error
+      authStore.loginError = error.message || 'Login gagal'
       authStore.setError('login', error.message || 'Login failed')
+      authStore.setAuthenticated(false)
+      authStore.user = null
       throw error
     } finally {
       authStore.setLoading(false)

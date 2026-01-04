@@ -31,6 +31,9 @@ router.get('/locations/:locationId/report', asyncHandler(ownerController.generat
 // Dashboard
 router.get('/dashboard', asyncHandler(ownerController.getOwnerDashboard));
 
+// Reports - Get all tickets for owner's locations
+router.get('/tickets', asyncHandler(ownerController.getOwnerTickets));
+
 // Staff management
 router.get('/staff', asyncHandler(ownerController.getStaffList));
 router.post('/staff', asyncHandler(ownerController.inviteStaff));

@@ -232,6 +232,21 @@ export const useOwnerApi = () => {
     return await del(`/owner/staff/${staffId}`)
   }
 
+  /**
+   * Get owner's tickets for reports (all locations)
+   */
+  const getOwnerTickets = async (
+    startDate: string,
+    endDate: string,
+    locationId?: number,
+    status?: string
+  ): Promise<ApiResponse<{ tickets: any[]; counters: any[]; locations: any[] }>> => {
+    const params: Record<string, any> = { startDate, endDate }
+    if (locationId) params.locationId = locationId
+    if (status) params.status = status
+    return await get('/owner/tickets', { params })
+  }
+
   return {
     // Location management
     getMyLocations,
@@ -245,6 +260,7 @@ export const useOwnerApi = () => {
     getLocationAnalytics,
     generateLocationReport,
     getTopPerformingLocations,
+    getOwnerTickets,
 
     // Counter management
     getLocationCounters,

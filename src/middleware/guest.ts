@@ -5,6 +5,13 @@ export default defineNuxtRouteMiddleware(async (to, from) => {
   }
 
   const { isAuthenticated, user, initializeAuth } = useAuth()
+  const authStore = useAuthStore()
+
+  // If there's a recent login error, don't redirect (stay on login page)
+  if (authStore.loginError) {
+    authStore.loginError = null // Clear the error flag
+    return
+  }
 
   // Initialize auth state if not already done
   if (!user.value && !isAuthenticated.value) {

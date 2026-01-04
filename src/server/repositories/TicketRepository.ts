@@ -37,8 +37,9 @@ export class TicketRepository {
       throw new Error('Counter not found');
     }
 
-    // Generate queue number: PREFIX + sequence (padded to 3 digits)
-    const queueNumber = `${counter.prefix}${String(nextSequence).padStart(3, '0')}`;
+    // Generate queue number: PREFIX + 4 digit sequence (A0001 to A9999)
+    // Max capacity is 1000 per day, 4 digits supports up to 9999
+    const queueNumber = `${counter.prefix}${String(nextSequence).padStart(4, '0')}`;
 
     const completeTicketData = {
       ...ticketData,
@@ -447,5 +448,116 @@ export class TicketRepository {
       order: [['created_at', 'ASC']],
       transaction,
     });
+  }
+
+  /**
+   * Find active ticket by user and counter for a specific date
+   * Used to enforce 1 user = 1 active ticket per counter rule
+   */
+  async findActiveByUserAndCounter(
+    userId: number,
+    counterId: number,
+    date: string,
+    transaction?: Transaction
+  ): Promise<Ticket | null> {
+    return Ticket.findOne({
+      where: {
+        user_id: userId,
+        counter_id: counterId,
+        date_for: date,
+        status: {
+          [Op.in]: [
+            TicketStatus.WAITING,
+            TicketStatus.CALLING,
+            TicketStatus.SERVING,
+            TicketStatus.HOLD,
+          ],
+        },
+      },
+      include: [
+        {
+          model: Counter,
+          as: 'counter',
+          attributes: ['id', 'name', 'prefix'],
+        },
+      ],
+      transaction,
+    });
+  }
+
+  /**
+   * Get queue info for a counter (total waiting, current serving, avg time)
+   */
+  async getQueueInfo(
+    counterId: number,
+    date: string,
+    transaction?: Transaction
+  ): Promise<{
+    totalWaiting: number;
+    totalToday: number;
+    currentlyServing: string | null;
+    avgServiceTimeMinutes: number;
+  }> {
+    // Count waiting tickets
+    const totalWaiting = await Ticket.count({
+      where: {
+        counter_id: counterId,
+        date_for: date,
+        status: TicketStatus.WAITING,
+      },
+      transaction,
+    });
+
+    // Count total tickets today
+    const totalToday = await Ticket.count({
+      where: {
+        counter_id: counterId,
+        date_for: date,
+      },
+      transaction,
+    });
+
+    // Get currently serving ticket
+    const servingTicket = await Ticket.findOne({
+      where: {
+        counter_id: counterId,
+        date_for: date,
+        status: {
+          [Op.in]: [TicketStatus.CALLING, TicketStatus.SERVING],
+        },
+      },
+      transaction,
+    });
+
+    // Calculate average service time from completed tickets
+    const completedTickets = await Ticket.findAll({
+      where: {
+        counter_id: counterId,
+        date_for: date,
+        status: TicketStatus.DONE,
+      },
+      attributes: ['started_at', 'finished_at'],
+      transaction,
+    });
+
+    let avgServiceTimeMinutes = 5; // Default estimate
+    const validTickets = completedTickets.filter(
+      (t) => t.started_at && t.finished_at
+    );
+    if (validTickets.length > 0) {
+      const totalMinutes = validTickets.reduce((sum: number, ticket) => {
+        const start = new Date(ticket.started_at!).getTime();
+        const end = new Date(ticket.finished_at!).getTime();
+        return sum + (end - start) / 60000; // Convert to minutes
+      }, 0);
+      avgServiceTimeMinutes = Math.round(totalMinutes / validTickets.length);
+    }
+
+    return {
+      totalWaiting,
+      totalToday,
+      currentlyServing: servingTicket?.queue_number || null,
+      avgServiceTimeMinutes,
+    };
   }
 }

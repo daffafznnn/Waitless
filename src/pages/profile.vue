@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
-import { BottomNavigation } from '@/components/visitor'
+import { BottomNavigation, VisitorHeader } from '@/components/visitor'
 
 definePageMeta({
   layout: false
@@ -18,14 +18,17 @@ const isLoading = ref(false)
 const ticketCount = ref(0)
 
 // User data with fallback
-const user = computed(() => ({
-  name: authStore.user?.name || 'Tamu',
-  email: authStore.user?.email || '',
-  phone: authStore.user?.phone || '',
-  verified: authStore.isAuthenticated,
-  avatar_url: authStore.user?.avatar_url || '',
-  google_id: authStore.user?.google_id || ''
-}))
+const user = computed(() => {
+  const u = authStore.user as any
+  return {
+    name: u?.name || 'Tamu',
+    email: u?.email || '',
+    phone: u?.phone || '',
+    verified: authStore.isAuthenticated,
+    avatar_url: u?.avatar_url || '',
+    google_id: u?.google_id || ''
+  }
+})
 
 // Default avatar using dicebear initials
 const defaultAvatar = computed(() => 
@@ -33,7 +36,7 @@ const defaultAvatar = computed(() =>
 )
 
 // Check if user has Google account
-const isGoogleAccount = computed(() => !!authStore.user?.google_id)
+const isGoogleAccount = computed(() => !!(authStore.user as any)?.google_id)
 
 // Edit Profile Modal State
 const isEditModalOpen = ref(false)
@@ -468,23 +471,24 @@ useHead({
 <template>
   <div class="min-h-screen bg-surface-100 pb-20">
     <!-- Header -->
-    <header class="bg-white px-6 py-4 sticky top-0 z-10">
-      <div class="flex items-start justify-between gap-4">
-        <div class="flex-1">
-          <h1 class="text-lg font-semibold text-surface-900 mb-0.5">
-            Profil saya
-          </h1>
-          <p class="text-xs text-surface-500 leading-4">
-            Atur akun dan preferensi antrean.
-          </p>
-        </div>
-        <button class="flex-shrink-0 p-2 -mr-2">
-          <svg class="w-[18px] h-[18px] text-surface-400" viewBox="0 0 18 18" fill="currentColor">
+    <VisitorHeader
+      title="Profil saya"
+      subtitle="Atur akun dan preferensi antrean."
+      :show-notification="false"
+      :show-profile="false"
+    >
+      <template #actions>
+        <button
+          class="flex-shrink-0 p-2 -mr-2 text-surface-400 hover:text-surface-700 transition-colors"
+          @click="handleEditData"
+        >
+          <svg class="w-[18px] h-[18px]" viewBox="0 0 18 18" fill="currentColor">
             <path d="M17.4339 5.85703C17.5464 6.16289 17.4515 6.50391 17.2089 6.72187L15.6866 8.10703C15.7253 8.39883 15.7464 8.69766 15.7464 9C15.7464 9.30234 15.7253 9.60117 15.6866 9.89297L17.2089 11.2781C17.4515 11.4961 17.5464 11.8371 17.4339 12.143C17.2792 12.5613 17.0929 12.9621 16.8784 13.3488L16.7132 13.6336C16.4812 14.0203 16.221 14.3859 15.9362 14.7305C15.7288 14.9836 15.3843 15.068 15.0749 14.9695L13.1167 14.3473C12.6456 14.7094 12.1253 15.0117 11.5698 15.2402L11.1304 17.2477C11.0601 17.5676 10.814 17.8207 10.4905 17.8734C10.0054 17.9543 9.50616 17.9965 8.9964 17.9965C8.48663 17.9965 7.98741 17.9543 7.50225 17.8734C7.17882 17.8207 6.93272 17.5676 6.86241 17.2477L6.42296 15.2402C5.86749 15.0117 5.34718 14.7094 4.87608 14.3473L2.9214 14.973C2.61202 15.0715 2.26749 14.9836 2.06007 14.734C1.7753 14.3895 1.51515 14.0238 1.28311 13.6371L1.11788 13.3523C0.903427 12.9656 0.717099 12.5648 0.562411 12.1465C0.449911 11.8406 0.544833 11.4996 0.787411 11.2816L2.30968 9.89648C2.27101 9.60117 2.24991 9.30234 2.24991 9C2.24991 8.69766 2.27101 8.39883 2.30968 8.10703L0.787411 6.72187C0.544833 6.50391 0.449911 6.16289 0.562411 5.85703C0.717099 5.43867 0.903427 5.03789 1.11788 4.65117L1.28311 4.36641C1.51515 3.97969 1.7753 3.61406 2.06007 3.26953C2.26749 3.01641 2.61202 2.93203 2.9214 3.03047L4.8796 3.65273C5.35069 3.29063 5.87101 2.98828 6.42647 2.75977L6.86593 0.752344C6.93624 0.432422 7.18233 0.179297 7.50577 0.126562C7.99093 0.0421875 8.49015 0 8.99991 0C9.50968 0 10.0089 0.0421875 10.4941 0.123047C10.8175 0.175781 11.0636 0.428906 11.1339 0.748828L11.5733 2.75625C12.1288 2.98477 12.6491 3.28711 13.1202 3.64922L15.0784 3.02695C15.3878 2.92852 15.7323 3.01641 15.9398 3.26602C16.2245 3.61055 16.4847 3.97617 16.7167 4.36289L16.8819 4.64766C17.0964 5.03437 17.2827 5.43516 17.4374 5.85352L17.4339 5.85703ZM8.99991 11.8125C9.74583 11.8125 10.4612 11.5162 10.9886 10.9887C11.5161 10.4613 11.8124 9.74592 11.8124 9C11.8124 8.25408 11.5161 7.53871 10.9886 7.01126C10.4612 6.48382 9.74583 6.1875 8.99991 6.1875C8.25399 6.1875 7.53862 6.48382 7.01117 7.01126C6.48373 7.53871 6.18741 8.25408 6.18741 9C6.18741 9.74592 6.48373 10.4613 7.01117 10.9887C7.53862 11.5162 8.25399 11.8125 8.99991 11.8125Z"/>
           </svg>
         </button>
-      </div>
-    </header>
+      </template>
+    </VisitorHeader>
+
 
     <!-- Not Logged In Warning -->
     <div v-if="!authStore.isAuthenticated" class="px-4 pt-5">
