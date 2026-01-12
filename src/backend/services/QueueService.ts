@@ -25,7 +25,7 @@ import {
   InvalidTicketStatusError,
   DuplicateTicketError,
 } from '../types/errors';
-import { getJakartaTimeString, getJakartaDateString } from '../utils/datetime';
+import { getJakartaTimeString, getJakartaDateString, isWithinTimeRange } from '../utils/datetime';
 import type { IssueTicketRequest, CallNextResponse } from '../types';
 
 export class QueueService extends BaseService {
@@ -67,7 +67,7 @@ export class QueueService extends BaseService {
       // Validate counter is within open hours
       if (counter.open_time && counter.close_time) {
         const currentTime = getJakartaTimeString();
-        if (currentTime < counter.open_time || currentTime > counter.close_time) {
+        if (!isWithinTimeRange(currentTime, counter.open_time, counter.close_time)) {
           throw new CounterClosedError(counter.open_time, counter.close_time);
         }
       }
@@ -157,6 +157,53 @@ export class QueueService extends BaseService {
         ticket: updatedTicket,
         queueNumber: nextTicket.queue_number,
         message: `Memanggil tiket ${nextTicket.queue_number}`,
+      };
+    });
+  }
+
+  /**
+   * Re-call a ticket that's already in CALLING status
+   * This updates the updated_at timestamp and creates a RECALLED event
+   */
+  async recall(ticketId: number, actorId: number): Promise<CallNextResponse> {
+    const validTicketId = this.validateId(ticketId, 'Ticket ID');
+    const validActorId = this.validateId(actorId, 'Actor ID');
+
+    return this.withTransaction(async (t) => {
+      const ticket = await this.getTicketOrThrow(validTicketId, t);
+
+      // Only allow recall for CALLING status tickets
+      this.validateTicketStatus(
+        ticket.status,
+        [TicketStatus.CALLING],
+        'memanggil ulang'
+      );
+
+      const now = new Date();
+      
+      // Update called_at to trigger updated_at change
+      await this.ticketRepository.updateStatus(
+        validTicketId,
+        TicketStatus.CALLING,
+        { called_at: now },
+        t
+      );
+
+      // Create RECALLED event (reuse CALLED event type with different note)
+      await this.eventRepository.create({
+        ticket_id: validTicketId,
+        actor_id: validActorId,
+        event_type: EventType.CALLED,
+        note: 'Ticket re-called by staff',
+      }, t);
+
+      // Refetch ticket with updated data
+      const updatedTicket = await this.ticketRepository.findById(validTicketId, t);
+
+      return {
+        ticket: updatedTicket,
+        queueNumber: ticket.queue_number,
+        message: `Memanggil ulang tiket ${ticket.queue_number}`,
       };
     });
   }

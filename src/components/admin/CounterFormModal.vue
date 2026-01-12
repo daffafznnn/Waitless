@@ -260,11 +260,6 @@ const validateForm = (): boolean => {
     formErrors.value.closeTime = "Jam tutup harus diisi";
   }
 
-  if (formData.value.openTime && formData.value.closeTime) {
-    if (formData.value.openTime >= formData.value.closeTime) {
-      formErrors.value.closeTime = "Jam tutup harus lebih besar dari jam buka";
-    }
-  }
 
   // Capacity validation
   const capacity = parseInt(formData.value.capacityPerDay);

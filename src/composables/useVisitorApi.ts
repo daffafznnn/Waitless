@@ -16,6 +16,7 @@ export interface VisitorLocation {
   actionType: 'primary' | 'secondary' | 'disabled'
   counters?: Counter[]
   totalWaiting?: number
+  counterCount?: number
 }
 
 export interface VisitorTicket {
@@ -27,6 +28,7 @@ export interface VisitorTicket {
   statusText: string
   queueInfo: string
   takenAt: string
+  updatedAt?: string
   position?: number
   estimatedWait?: string
 }
@@ -54,27 +56,55 @@ export const useVisitorApi = () => {
       // Filter out inactive locations - only show open/active locations to visitors
       const activeLocations = locations.filter((loc: LocationWithOwner) => loc.is_active !== false)
       
-      // Transform locations to visitor format
-      const visitorLocations: VisitorLocation[] = activeLocations.map((loc: LocationWithOwner) => {
-        // Use is_active as the primary source of truth for location status
-        const isOpen = loc.is_active ?? true
-        const waitingCount = 0
-        
-        return {
-          id: loc.id,
-          name: loc.name,
-          address: loc.address || '',
-          city: loc.city || '',
-          status: isOpen ? 'open' : 'closed',
-          statusText: isOpen ? 'Buka' : 'Tutup',
-          queueInfo: isOpen 
-            ? `Antrian sekarang: ${waitingCount} orang` 
-            : 'Buka lagi besok',
-          actionText: isOpen ? 'Ambil Nomor' : 'Tidak bisa ambil',
-          actionType: isOpen ? 'primary' : 'disabled',
-          totalWaiting: waitingCount
-        }
-      })
+      // Fetch counter stats for each location to get real queue counts
+      const visitorLocations: VisitorLocation[] = await Promise.all(
+        activeLocations.map(async (loc: LocationWithOwner) => {
+          const isOpen = loc.is_active ?? true
+          let totalWaiting = 0
+          let counterCount = 0
+          
+          // Try to fetch counters to get actual queue count
+          try {
+            const countersResponse = await locationApi.getLocationCounters(loc.id)
+            if (countersResponse.ok && countersResponse.data?.counters) {
+              const activeCounters = countersResponse.data.counters.filter((c: Counter) => c.is_active)
+              counterCount = activeCounters.length
+              
+              // Fetch queue status for each counter
+              const queuePromises = activeCounters.map(async (counter: Counter) => {
+                try {
+                  const statusResponse = await queueApi.getQueueStatus(counter.id)
+                  if (statusResponse.ok && statusResponse.data?.status) {
+                    return (statusResponse.data.status as any).waiting || 0
+                  }
+                } catch { /* ignore */ }
+                return 0
+              })
+              
+              const waitingCounts = await Promise.all(queuePromises)
+              totalWaiting = waitingCounts.reduce((sum, count) => sum + count, 0)
+            }
+          } catch (err) {
+            console.warn(`Failed to fetch counters for location ${loc.id}:`, err)
+          }
+          
+          return {
+            id: loc.id,
+            name: loc.name,
+            address: loc.address || '',
+            city: loc.city || '',
+            status: isOpen ? 'open' : 'closed',
+            statusText: isOpen ? 'Buka' : 'Tutup',
+            queueInfo: isOpen 
+              ? `${totalWaiting} orang menunggu • ${counterCount} loket` 
+              : 'Buka lagi besok',
+            actionText: isOpen ? 'Ambil Nomor' : 'Tidak bisa ambil',
+            actionType: isOpen ? 'primary' : 'disabled',
+            totalWaiting,
+            counterCount
+          }
+        })
+      )
       
       return visitorLocations
     } catch (error) {
@@ -88,7 +118,12 @@ export const useVisitorApi = () => {
    */
   const getLocationDetail = async (locationId: number): Promise<{
     location: VisitorLocation | null
-    counters: (Counter & { waiting_count?: number; current_serving?: string; total_today?: number })[]
+    counters: (Counter & { 
+      waiting_count?: number
+      current_serving?: string
+      total_today?: number
+      capacity_remaining?: number 
+    })[]
   }> => {
     try {
       const [locResponse, countersResponse] = await Promise.all([
@@ -109,21 +144,37 @@ export const useVisitorApi = () => {
       // Fetch queue status for each active counter
       const countersWithStats = await Promise.all(
         activeCounters.map(async (counter: Counter) => {
+          let waiting = 0
+          let currentServing: string | undefined
+          let total = 0
+          let capacityRemaining: number | undefined
+          
           try {
             const statusResponse = await queueApi.getQueueStatus(counter.id)
             if (statusResponse.ok && statusResponse.data?.status) {
-              const stats = statusResponse.data.status as any // API returns different structure than type
-              return {
-                ...counter,
-                waiting_count: stats.waiting || 0,
-                current_serving: stats.currentServing?.queue_number || stats.nextWaiting?.queue_number || undefined,
-                total_today: stats.total || 0
+              const stats = statusResponse.data.status as any
+              waiting = stats.waiting || 0
+              currentServing = stats.currentServing?.queue_number || stats.current?.queue_number || undefined
+              total = stats.total || 0
+              
+              // Calculate remaining capacity if capacity_per_day is set
+              if (counter.capacity_per_day && counter.capacity_per_day > 0) {
+                // Total includes all active tickets (waiting + serving + calling + hold)
+                const activeCount = (stats.waiting || 0) + (stats.calling || 0) + (stats.serving || 0) + (stats.hold || 0)
+                capacityRemaining = Math.max(0, counter.capacity_per_day - activeCount)
               }
             }
           } catch (err) {
             console.warn(`Failed to fetch queue status for counter ${counter.id}:`, err)
           }
-          return { ...counter, waiting_count: 0, current_serving: undefined, total_today: 0 }
+          
+          return {
+            ...counter,
+            waiting_count: waiting,
+            current_serving: currentServing,
+            total_today: total,
+            capacity_remaining: capacityRemaining
+          }
         })
       )
       
@@ -239,6 +290,7 @@ export const useVisitorApi = () => {
           statusText: getStatusText(mappedStatus),
           queueInfo: getQueueInfo({ ...ticket, status: mappedStatus }),
           takenAt: formatTime(ticket.created_at),
+          updatedAt: ticket.updated_at,
           position: ticket.position,
           hold_reason: ticket.hold_reason || null // Include hold reason for on_hold tickets
         }

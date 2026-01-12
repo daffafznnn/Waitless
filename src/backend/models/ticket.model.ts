@@ -168,8 +168,8 @@ export const initTicketModel = (sequelize: Sequelize): typeof Ticket => {
         },
         {
           unique: true,
-          fields: ['queue_number'],
-          name: 'uq_queue_number'
+          fields: ['counter_id', 'date_for', 'queue_number'],
+          name: 'uq_counter_day_queue'
         },
       ],
     }

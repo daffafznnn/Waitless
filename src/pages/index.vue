@@ -192,8 +192,8 @@ useHead({
     <VisitorHeader
       :title="`Hai, ${userName} 👋`"
       subtitle="Mau antre di mana hari ini?"
-      :user-name="userName"
       :is-authenticated="authStore.isAuthenticated"
+      :user-avatar="authStore.user?.avatar_url"
     />
 
     <!-- Location Selector -->
@@ -261,6 +261,7 @@ useHead({
           :queue-info="location.queueInfo"
           :action-text="location.actionText"
           :action-type="location.actionType"
+          :total-waiting="location.totalWaiting"
           @action="handleLocationAction"
         />
       </div>

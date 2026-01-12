@@ -9,6 +9,7 @@ const router = Router();
 router.post('/issue', optionalAuth, asyncHandler(queueController.issueTicket));
 
 router.post('/call-next', requireAuth, asyncHandler(queueController.callNext));
+router.post('/recall', requireAuth, asyncHandler(queueController.recallTicket));
 router.post('/start-serving', requireAuth, asyncHandler(queueController.startServing));
 
 router.post('/hold', requireAuth, asyncHandler(queueController.holdTicket));

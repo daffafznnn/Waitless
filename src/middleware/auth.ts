@@ -9,8 +9,8 @@ export default defineNuxtRouteMiddleware((to, from) => {
     } else if (to.path.includes('/owner')) {
       return navigateTo('/owner/login')
     } else {
-      // Default to admin login
-      return navigateTo('/admin/login')
+      // Default to visitor login (unified)
+      return navigateTo('/login')
     }
   }
 

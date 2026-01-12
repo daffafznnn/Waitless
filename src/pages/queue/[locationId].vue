@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { StatusBadge, CounterCard, BottomNavigation, VisitorHeader } from '@/components/visitor'
+import { StatusBadge, BottomNavigation, VisitorHeader } from '@/components/visitor'
 import type { Counter } from '~/types'
 
 definePageMeta({
-  layout: false
+  layout: false,
+  middleware: 'auth'
 })
 
 const route = useRoute()
@@ -26,7 +27,60 @@ const location = ref<{
   status: 'open' | 'closed'
   statusText: string
 } | null>(null)
-const counters = ref<(Counter & { waiting_count?: number; current_serving?: string; total_today?: number })[]>([])
+const counters = ref<(Counter & { 
+  waiting_count?: number
+  current_serving?: string
+  total_today?: number
+  capacity_remaining?: number
+  is_within_hours?: boolean
+})[]>([])
+
+// Helper: Check if current time is within operating hours
+const isWithinOperatingHours = (openTime?: string, closeTime?: string): boolean => {
+  if (!openTime || !closeTime) return true // No hours set = always open
+  
+  const now = new Date()
+  const currentTime = now.toLocaleTimeString('en-GB', { 
+    hour: '2-digit', 
+    minute: '2-digit',
+    hour12: false,
+    timeZone: 'Asia/Jakarta'
+  })
+  
+  // Handle cross-midnight scenarios
+  if (closeTime < openTime) {
+    return currentTime >= openTime || currentTime < closeTime
+  }
+  return currentTime >= openTime && currentTime < closeTime
+}
+
+// Helper: Format time for display
+const formatTime = (time?: string): string => {
+  if (!time) return ''
+  // Remove seconds if present (HH:MM:SS -> HH:MM)
+  return time.substring(0, 5)
+}
+
+// Computed: Get counter status info
+const getCounterStatus = (counter: Counter & { 
+  waiting_count?: number
+  capacity_remaining?: number 
+}): { canTake: boolean; reason: string; statusClass: string } => {
+  if (!counter.is_active) {
+    return { canTake: false, reason: 'Loket tidak aktif', statusClass: 'inactive' }
+  }
+  
+  const withinHours = isWithinOperatingHours(counter.open_time, counter.close_time)
+  if (!withinHours) {
+    return { canTake: false, reason: 'Loket sudah tutup', statusClass: 'closed' }
+  }
+  
+  if (counter.capacity_remaining !== undefined && counter.capacity_remaining <= 0) {
+    return { canTake: false, reason: 'Kapasitas antrian penuh', statusClass: 'full' }
+  }
+  
+  return { canTake: true, reason: '', statusClass: 'available' }
+}
 
 // Load location data
 const loadLocationData = async () => {
@@ -60,7 +114,12 @@ const loadLocationData = async () => {
       status: data.location.status,
       statusText: data.location.statusText
     }
-    counters.value = data.counters
+    
+    // Enhance counters with operating hours check
+    counters.value = data.counters.map(counter => ({
+      ...counter,
+      is_within_hours: isWithinOperatingHours(counter.open_time, counter.close_time)
+    }))
   } catch (error) {
     console.error('Failed to load location:', error)
     toast.add({
@@ -71,6 +130,27 @@ const loadLocationData = async () => {
   } finally {
     isLoading.value = false
   }
+}
+
+// Handle button click (even when disabled for feedback)
+const handleButtonClick = async (counter: Counter & { 
+  waiting_count?: number
+  capacity_remaining?: number 
+}) => {
+  const status = getCounterStatus(counter)
+  
+  if (!status.canTake) {
+    // Show feedback message for disabled state
+    await $modal.alert({
+      title: 'Tidak Dapat Mengambil Antrian',
+      message: status.reason,
+      type: 'warning'
+    })
+    return
+  }
+  
+  // Proceed with taking the number
+  await handleTakeNumber(counter.id)
 }
 
 // Take queue number
@@ -190,7 +270,7 @@ useHead({
     <template v-else-if="location">
       <!-- Location Info -->
       <div class="px-4 pt-4">
-        <div class="bg-white rounded-2xl shadow-xs p-4">
+        <div class="bg-white rounded-2xl shadow-sm p-4 transition-all duration-300">
           <h2 class="text-lg font-semibold text-surface-900 mb-1">
             {{ location.name }}
           </h2>
@@ -216,7 +296,7 @@ useHead({
         </div>
 
         <!-- Empty State -->
-        <div v-if="counters.length === 0" class="text-center py-8 bg-white rounded-2xl">
+        <div v-if="counters.length === 0" class="text-center py-8 bg-white rounded-2xl shadow-sm">
           <svg class="w-12 h-12 text-surface-300 mx-auto mb-3" fill="currentColor" viewBox="0 0 20 20">
             <path fill-rule="evenodd" d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm3 1h6v4H7V5zm6 6H7v2h6v-2z" clip-rule="evenodd" />
           </svg>
@@ -227,16 +307,48 @@ useHead({
           <div
             v-for="counter in counters"
             :key="counter.id"
-            class="bg-white rounded-2xl shadow-xs p-4"
+            class="bg-white rounded-2xl shadow-sm p-4 transition-all duration-300 hover:shadow-md"
+            :class="{ 'opacity-60': !getCounterStatus(counter).canTake }"
           >
             <div class="flex items-start justify-between gap-4">
               <div class="flex-1 min-w-0">
-                <h3 class="text-base font-medium text-surface-900 mb-1">
-                  {{ counter.name }}
-                </h3>
+                <div class="flex items-center gap-2 mb-1">
+                  <h3 class="text-base font-medium text-surface-900">
+                    {{ counter.name }}
+                  </h3>
+                  <!-- Status indicator -->
+                  <span 
+                    v-if="!getCounterStatus(counter).canTake"
+                    class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium"
+                    :class="{
+                      'bg-danger-100 text-danger-700': getCounterStatus(counter).statusClass === 'closed',
+                      'bg-warning-100 text-warning-700': getCounterStatus(counter).statusClass === 'full',
+                      'bg-surface-100 text-surface-600': getCounterStatus(counter).statusClass === 'inactive'
+                    }"
+                  >
+                    {{ getCounterStatus(counter).reason }}
+                  </span>
+                </div>
+                
                 <p class="text-sm text-surface-500 mb-3">
                   {{ counter.description || 'Layanan umum' }}
                 </p>
+                
+                <!-- Operating Hours -->
+                <div v-if="counter.open_time && counter.close_time" class="flex items-center gap-1.5 text-sm text-surface-600 mb-3">
+                  <svg class="w-4 h-4 text-surface-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span>
+                    Buka {{ formatTime(counter.open_time) }} - {{ formatTime(counter.close_time) }}
+                  </span>
+                  <span 
+                    v-if="counter.is_within_hours === false" 
+                    class="text-xs text-danger-600 font-medium"
+                  >
+                    (Tutup)
+                  </span>
+                </div>
                 
                 <!-- Queue Stats -->
                 <template v-if="counter.is_active">
@@ -261,30 +373,46 @@ useHead({
                       <span class="text-success-700">Dilayani: <strong>{{ counter.current_serving }}</strong></span>
                     </div>
                     
-                    <!-- Total today -->
-                    <div v-if="counter.total_today" class="flex items-center gap-1.5 text-surface-500">
+                    <!-- Capacity indicator -->
+                    <div v-if="counter.capacity_per_day" class="flex items-center gap-1.5 text-surface-500">
                       <span class="text-xs">•</span>
-                      <span>{{ counter.total_today }} hari ini</span>
+                      <span v-if="counter.capacity_remaining !== undefined && counter.capacity_remaining > 0">
+                        Sisa kuota: {{ counter.capacity_remaining }}/{{ counter.capacity_per_day }}
+                      </span>
+                      <span v-else-if="counter.capacity_remaining === 0" class="text-danger-600 font-medium">
+                        Kuota habis
+                      </span>
+                      <span v-else>
+                        Kuota: {{ counter.capacity_per_day }}/hari
+                      </span>
                     </div>
                   </div>
                 </template>
                 <template v-else>
-                  <span class="text-sm text-danger-600 font-medium">Tutup</span>
+                  <span class="text-sm text-danger-600 font-medium">Loket tidak aktif</span>
                 </template>
               </div>
+              
+              <!-- Action Button -->
               <button
-                :disabled="!counter.is_active || isTakingNumber"
-                class="px-4 py-2 text-sm font-medium rounded-lg transition-colors whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
-                :class="counter.is_active 
-                  ? 'bg-success-600 text-white hover:bg-success-700' 
-                  : 'bg-surface-200 text-surface-500'"
-                @click="handleTakeNumber(counter.id)"
+                :disabled="isTakingNumber"
+                class="px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 whitespace-nowrap active:scale-95"
+                :class="getCounterStatus(counter).canTake 
+                  ? 'bg-success-600 text-white hover:bg-success-700 shadow-sm hover:shadow' 
+                  : 'bg-surface-200 text-surface-400 cursor-pointer'"
+                @click="handleButtonClick(counter)"
               >
                 <template v-if="isTakingNumber">
-                  <span class="animate-pulse">Memproses...</span>
+                  <span class="flex items-center gap-1">
+                    <svg class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Memproses
+                  </span>
                 </template>
                 <template v-else>
-                  {{ counter.is_active ? 'Ambil Nomor' : 'Tidak tersedia' }}
+                  {{ getCounterStatus(counter).canTake ? 'Ambil Nomor' : 'Tidak tersedia' }}
                 </template>
               </button>
             </div>
@@ -292,12 +420,18 @@ useHead({
         </div>
 
         <!-- Info -->
-        <div class="mt-6 px-2 space-y-0.5">
-          <p class="text-xs text-surface-500 leading-4">
-            • Nomor antrian hanya berlaku di cabang ini.
+        <div class="mt-6 px-2 space-y-1">
+          <p class="text-xs text-surface-500 leading-4 flex items-start gap-1.5">
+            <span class="text-surface-400">•</span>
+            Nomor antrian hanya berlaku di cabang ini.
           </p>
-          <p class="text-xs text-surface-500 leading-4">
-            • Kalau kamu tidak hadir saat dipanggil, nomor bisa ditahan oleh admin.
+          <p class="text-xs text-surface-500 leading-4 flex items-start gap-1.5">
+            <span class="text-surface-400">•</span>
+            Kalau kamu tidak hadir saat dipanggil, nomor bisa ditahan oleh admin.
+          </p>
+          <p class="text-xs text-surface-500 leading-4 flex items-start gap-1.5">
+            <span class="text-surface-400">•</span>
+            Perhatikan jam operasional dan kuota antrian setiap loket.
           </p>
         </div>
       </div>

@@ -25,6 +25,10 @@ export const useQueueApi = () => {
     return await post('/queue/call-next', data)
   }
 
+  const recallTicket = async (data: { ticketId: number }): Promise<ApiResponse<{ ticket?: Ticket; queueNumber?: string; message: string }>> => {
+    return await post('/queue/recall', data)
+  }
+
   const startServing = async (data: StartServingRequest): Promise<ApiResponse<{ ticket: Ticket }>> => {
     return await post('/queue/start-serving', data)
   }
@@ -82,6 +86,7 @@ export const useQueueApi = () => {
   return {
     issueTicket,
     callNext,
+    recallTicket,
     startServing,
     holdTicket,
     resumeTicket,

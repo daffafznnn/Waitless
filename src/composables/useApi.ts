@@ -49,8 +49,8 @@ export const useApi = (options: UseApiOptions = {}) => {
           } else if (currentPath.startsWith('/owner')) {
             await navigateTo('/owner/login')
           } else {
-            // Default to homepage for unauthorized general requests
-            await navigateTo('/')
+            // Redirect to login for unauthorized general requests
+            await navigateTo('/login')
           }
         }
       }

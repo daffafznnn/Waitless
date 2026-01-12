@@ -101,7 +101,14 @@ export function isWithinTimeRange(
   startTime: string,
   endTime: string
 ): boolean {
-  return time >= startTime && time <= endTime;
+  if (startTime <= endTime) {
+    // Normal range (e.g., 08:00 - 17:00)
+    return time >= startTime && time <= endTime;
+  } else {
+    // Cross-midnight range (e.g., 22:00 - 03:00)
+    // Time is valid if it's after start (23:00 > 22:00) OR before end (01:00 < 03:00)
+    return time >= startTime || time <= endTime;
+  }
 }
 
 /**

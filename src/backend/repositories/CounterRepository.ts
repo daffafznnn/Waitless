@@ -135,11 +135,11 @@ export class CounterRepository {
       throw new Error('Counter not found');
     }
 
-    // Count tickets issued today for this counter
+    // Count ACTIVE tickets issued today for this counter (exclude DONE and CANCELLED)
     const results = await sequelize.query(`
       SELECT COUNT(*) as issued_count 
       FROM tickets 
-      WHERE counter_id = ? AND date_for = ?
+      WHERE counter_id = ? AND date_for = ? AND status NOT IN ('DONE', 'CANCELLED')
     `, {
       replacements: [counterId, date],
       type: QueryTypes.SELECT,

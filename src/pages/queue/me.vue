@@ -4,7 +4,8 @@ import { TicketCard, BottomNavigation, VisitorHeader } from '@/components/visito
 import type { VisitorTicket } from '@/composables/useVisitorApi'
 
 definePageMeta({
-  layout: false
+  layout: false,
+  middleware: 'auth'
 })
 
 // APIs and stores
@@ -230,20 +231,28 @@ useHead({
     <!-- Header -->
     <VisitorHeader
       title="Antrian Saya"
-      subtitle="Lihat antrean yang sedang berjalan dan riwayatnya."
+      subtitle="Lihat antrean yang sedang berjalan."
       :show-notification="false"
-      :show-profile="false"
+      :is-authenticated="authStore.isAuthenticated"
+      :user-name="authStore.user?.name"
+      :user-avatar="authStore.user?.avatar_url"
     >
-      <template #actions>
-        <button class="flex-shrink-0" @click="loadTickets">
+      <template #before-actions>
+        <!-- Refresh Button -->
+        <button 
+          class="w-10 h-10 flex items-center justify-center text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-all active:scale-95"
+          :class="{ 'pointer-events-none': isLoading }"
+          @click="loadTickets"
+          title="Refresh"
+        >
           <svg
-            class="w-4 h-[18px] text-surface-400 hover:text-primary-600 transition-colors"
+            class="w-5 h-5 transition-transform"
             :class="{ 'animate-spin': isLoading }"
-            viewBox="0 0 16 18"
-            fill="currentColor"
-            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
           >
-            <path d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" stroke="currentColor"/>
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
           </svg>
         </button>
       </template>
@@ -268,48 +277,48 @@ useHead({
 
     <template v-else>
       <!-- Tab Selector -->
-      <section class="bg-white px-4 pb-4">
-        <div class="bg-surface-100 rounded-xl p-1 flex items-center gap-1">
+      <section class="px-4 pt-6 pb-4">
+        <div class="bg-gray-200/80 backdrop-blur-sm rounded-2xl p-1.5 flex items-center gap-1.5 shadow-inner">
           <button
-            class="flex-1 py-1.5 text-sm font-medium rounded-lg transition-all relative"
+            class="flex-1 py-2 text-sm font-semibold rounded-xl transition-all duration-200 relative"
             :class="
               activeTab === 'active'
-                ? 'bg-white text-primary-600 shadow-xs'
-                : 'text-surface-500'
+                ? 'bg-white text-primary-600 shadow-sm ring-1 ring-black/5'
+                : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50'
             "
             @click="setActiveTab('active')"
           >
             Aktif
             <span 
               v-if="activeTickets.length > 0"
-              class="absolute -top-1 -right-1 w-5 h-5 bg-primary-600 text-white text-xs rounded-full flex items-center justify-center"
+              class="absolute -top-1.5 -right-1.5 w-5 h-5 bg-primary-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center ring-2 ring-white"
             >
               {{ activeTickets.length }}
             </span>
           </button>
           <button
-            class="flex-1 py-1.5 text-sm font-medium rounded-lg transition-all relative"
+            class="flex-1 py-2 text-sm font-semibold rounded-xl transition-all duration-200 relative"
             :class="
               activeTab === 'on-hold'
-                ? 'bg-white text-primary-600 shadow-xs'
-                : 'text-surface-500'
+                ? 'bg-white text-primary-600 shadow-sm ring-1 ring-black/5'
+                : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50'
             "
             @click="setActiveTab('on-hold')"
           >
             Ditahan
             <span 
               v-if="onHoldTickets.length > 0"
-              class="absolute -top-1 -right-1 w-5 h-5 bg-warning-600 text-white text-xs rounded-full flex items-center justify-center"
+              class="absolute -top-1.5 -right-1.5 w-5 h-5 bg-warning-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center ring-2 ring-white"
             >
               {{ onHoldTickets.length }}
             </span>
           </button>
           <button
-            class="flex-1 py-1.5 text-sm font-medium rounded-lg transition-all"
+            class="flex-1 py-2 text-sm font-semibold rounded-xl transition-all duration-200"
             :class="
               activeTab === 'history'
-                ? 'bg-white text-primary-600 shadow-xs'
-                : 'text-surface-500'
+                ? 'bg-white text-primary-600 shadow-sm ring-1 ring-black/5'
+                : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50'
             "
             @click="setActiveTab('history')"
           >
@@ -325,20 +334,25 @@ useHead({
       </div>
 
       <!-- Content -->
-      <main v-else class="px-4 py-0">
+      <main v-else class="px-4 pb-32">
         <!-- Empty State -->
-        <div v-if="currentTabTickets.length === 0" class="text-center py-12">
-          <svg class="w-16 h-16 text-surface-300 mx-auto mb-4" fill="currentColor" viewBox="0 0 20 20">
-            <path fill-rule="evenodd" d="M5 3a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2V5a2 2 0 00-2-2H5zm9 4a1 1 0 10-2 0v6a1 1 0 102 0V7zm-3 2a1 1 0 10-2 0v4a1 1 0 102 0V9zm-3 3a1 1 0 10-2 0v1a1 1 0 102 0v-1z" clip-rule="evenodd" />
-          </svg>
-          <p class="text-surface-600 mb-4">
+        <div v-if="currentTabTickets.length === 0" class="text-center py-16">
+          <div class="bg-gray-100/50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6 ring-8 ring-gray-50">
+            <svg class="w-10 h-10 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+          </div>
+          <h3 class="text-lg font-semibold text-gray-900 mb-2">
             <template v-if="activeTab === 'active'">Tidak ada antrian aktif</template>
             <template v-else-if="activeTab === 'on-hold'">Tidak ada antrian ditahan</template>
             <template v-else>Belum ada riwayat antrian</template>
+          </h3>
+          <p class="text-sm text-gray-500 mb-8 max-w-[250px] mx-auto">
+            Ambil nomor antrian baru atau cek tab lain untuk melihat status antrian Anda.
           </p>
           <button
             v-if="activeTab === 'active'"
-            class="px-6 py-2 bg-primary-600 text-white text-sm font-medium rounded-full hover:bg-primary-700 transition-colors"
+            class="px-8 py-3 bg-primary-600 text-white font-semibold rounded-full hover:bg-primary-700 transition-all shadow-lg shadow-primary-600/20 active:scale-95"
             @click="navigateToGetTicket"
           >
             Ambil Nomor Antrian
@@ -346,11 +360,11 @@ useHead({
         </div>
 
         <!-- Tickets List -->
-        <div v-else class="space-y-4">
+        <div v-else class="space-y-5">
           <div
             v-for="(ticket, index) in currentTabTickets"
             :key="ticket.id"
-            class="bg-white rounded-2xl shadow-xs p-4"
+            class="bg-white rounded-3xl p-5 shadow-sm border border-gray-100 transition-all hover:shadow-md active:scale-[0.99]"
             :class="{ 'ring-2 ring-success-500': ticket.status === 'serving' }"
           >
             <!-- Ticket Header -->

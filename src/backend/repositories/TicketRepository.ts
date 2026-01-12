@@ -40,7 +40,7 @@ export class TicketRepository {
     }
 
     // Generate queue number: PREFIX + 4 digit sequence (A0001 to A9999)
-    // Max capacity is 1000 per day, 4 digits supports up to 9999
+    // Uniqueness is per counter+date, so B0001 can exist on different days
     const queueNumber = `${counter.prefix}${String(nextSequence).padStart(4, '0')}`;
 
     const completeTicketData = {

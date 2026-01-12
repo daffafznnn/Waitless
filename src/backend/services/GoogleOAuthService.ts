@@ -20,30 +20,49 @@ interface GoogleUserInfo {
 }
 
 export class GoogleOAuthService {
-  private clientId: string;
-  private clientSecret: string;
-  private redirectUri: string;
-
-  constructor() {
-    this.clientId = process.env.GOOGLE_CLIENT_ID || '';
-    this.clientSecret = process.env.GOOGLE_CLIENT_SECRET || '';
-    this.redirectUri = process.env.GOOGLE_CALLBACK_URL || 'http://localhost:3000/api/auth/google/callback';
+  private get clientId(): string {
+    return process.env.GOOGLE_CLIENT_ID || '';
   }
+
+  private get clientSecret(): string {
+    return process.env.GOOGLE_CLIENT_SECRET || '';
+  }
+
+  private get redirectUri(): string {
+    return process.env.GOOGLE_CALLBACK_URL || 'http://localhost:3000/api/auth/google/callback';
+  }
+
+  constructor() {}
 
   /**
    * Generate Google OAuth consent URL
    */
   getAuthUrl(): string {
+    // Validate configuration before generating URL
+    if (!this.clientId || this.clientId.trim() === '') {
+      throw new Error('GOOGLE_CLIENT_ID is not configured or is empty');
+    }
+    if (!this.clientSecret || this.clientSecret.trim() === '') {
+      throw new Error('GOOGLE_CLIENT_SECRET is not configured or is empty');
+    }
+
     const params = new URLSearchParams({
-      client_id: this.clientId,
-      redirect_uri: this.redirectUri,
+      client_id: this.clientId.trim(),
+      redirect_uri: this.redirectUri.trim(),
       response_type: 'code',
       scope: 'openid email profile',
       access_type: 'offline',
       prompt: 'consent'
     });
 
-    return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
+    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
+    
+    // Log for debugging (remove in production)
+    console.log('[GoogleOAuth] Generated auth URL:', authUrl);
+    console.log('[GoogleOAuth] Client ID (first 20 chars):', this.clientId.substring(0, 20) + '...');
+    console.log('[GoogleOAuth] Redirect URI:', this.redirectUri);
+
+    return authUrl;
   }
 
   /**

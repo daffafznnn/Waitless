@@ -143,16 +143,16 @@
         </div>
         <div v-else class="flex gap-2 items-start px-6 py-0">
           <UiActionButton
-            v-if="item.status === 'WAITING'"
+            v-if="item.status === 'WAITING' || item.status === 'CALLING'"
             @click="handleCallTicket(item)"
             variant="ghost"
             size="xs"
             class="bg-blue-50 text-blue-600 hover:bg-blue-100"
           >
-            Panggil
+            {{ item.status === 'CALLING' ? 'Panggil Ulang' : 'Panggil' }}
           </UiActionButton>
           <UiActionButton
-            v-if="item.status === 'WAITING' || item.status === 'CALLING'"
+            v-if="item.status === 'CALLING' || item.status === 'SERVING'"
             @click="handleHoldTicket(item)"
             variant="ghost"
             size="xs"
@@ -161,7 +161,7 @@
             Hold
           </UiActionButton>
           <UiActionButton
-            v-if="item.status === 'WAITING' || item.status === 'CALLING' || item.status === 'SERVING'"
+            v-if="item.status === 'CALLING' || item.status === 'SERVING'"
             @click="handleMarkDone(item)"
             variant="ghost"
             size="xs"
@@ -597,15 +597,30 @@ const handleCallTicket = async (ticket: Ticket) => {
   }
   
   try {
-    await queueStore.callNext({ counterId: Number(counterId) })
-    await refreshData()
+    // Distinguish between call (WAITING) and recall (CALLING)
+    const isRecall = ticket.status === 'CALLING'
     
-    toast.add({
-      title: 'Berhasil',
-      description: `Tiket ${ticket.queue_number} berhasil dipanggil`,
-      icon: 'i-heroicons-megaphone',
-      color: 'green'
-    })
+    if (isRecall) {
+      // Re-call an already calling ticket
+      await queueStore.recallTicket({ ticketId: Number(ticket.id) })
+      toast.add({
+        title: 'Berhasil',
+        description: `Tiket ${ticket.queue_number} berhasil dipanggil ulang`,
+        icon: 'i-heroicons-megaphone',
+        color: 'green'
+      })
+    } else {
+      // Call next waiting ticket
+      await queueStore.callNext({ counterId: Number(counterId) })
+      toast.add({
+        title: 'Berhasil',
+        description: `Tiket ${ticket.queue_number} berhasil dipanggil`,
+        icon: 'i-heroicons-megaphone',
+        color: 'green'
+      })
+    }
+    
+    await refreshData()
   } catch (error: any) {
     console.error('Failed to call ticket:', error)
     toast.add({
@@ -705,6 +720,7 @@ const handleResumeTicket = async (ticket: Ticket) => {
 
 const handleMarkDone = async (ticket: Ticket) => {
   const toast = useToast()
+  const { $modal } = useNuxtApp()
   
   // Validate ticket ID
   if (!ticket.id) {
@@ -717,6 +733,17 @@ const handleMarkDone = async (ticket: Ticket) => {
     })
     return
   }
+
+  // Confirm action
+  const confirmed = await $modal.confirm({
+    title: 'Selesaikan Pelayanan',
+    message: `Apakah Anda yakin ingin menyelesaikan pelayanan untuk tiket <strong>${ticket.queue_number}</strong>?`,
+    type: 'info',
+    confirmText: 'Ya, Selesai',
+    cancelText: 'Batal'
+  })
+  
+  if (!confirmed) return
   
   try {
     await queueStore.markDone({ ticketId: Number(ticket.id) })

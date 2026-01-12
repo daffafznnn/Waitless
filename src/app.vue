@@ -23,6 +23,8 @@
 </template>
 
 <script setup lang="ts">
+import { useQueueNotification } from '~/composables/useQueueNotification'
+
 // App-level configuration
 useHead({
   titleTemplate: '%s - Waitless',
@@ -46,8 +48,37 @@ const { pending } = useLazyAsyncData('app-init', () => {
 
 // Initialize auth state if user is logged in
 const { initializeAuth } = useAuth()
+const authStore = useAuthStore()
+
+// Queue notification instance
+let notificationInstance: ReturnType<typeof useQueueNotification> | null = null
+
+const initNotifications = () => {
+  if (!notificationInstance) {
+    notificationInstance = useQueueNotification()
+  }
+  notificationInstance.showPendingOnLoad()
+  notificationInstance.startPolling()
+}
+
 onMounted(async () => {
   await initializeAuth()
+  
+  // Initialize queue notifications after auth
+  if (authStore.isAuthenticated) {
+    initNotifications()
+  }
+})
+
+// Watch for auth state changes to start/stop notifications
+watch(() => authStore.isAuthenticated, (isAuth) => {
+  if (isAuth) {
+    initNotifications()
+  } else if (notificationInstance) {
+    notificationInstance.stopPolling()
+    notificationInstance.clearAllState()
+    notificationInstance = null
+  }
 })
 
 // Global error handling

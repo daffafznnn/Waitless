@@ -26,15 +26,16 @@ export default defineNuxtRouteMiddleware(async (to, from) => {
   if (isAuthenticated.value && user.value) {
     const userRole = user.value.role
     
-    // Redirect based on user role to their appropriate dashboard
+    // Redirect ADMIN and OWNER to their dashboards
+    // But allow VISITOR to access login/register pages freely
     switch (userRole) {
       case 'ADMIN':
         return navigateTo('/admin/dashboard')
       case 'OWNER':
         return navigateTo('/owner/dashboard')
       default:
-        // For VISITOR or other roles, redirect to homepage
-        return navigateTo('/')
+        // VISITOR can access login page freely (no redirect)
+        return
     }
   }
 })

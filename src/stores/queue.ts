@@ -131,6 +131,30 @@ export const useQueueStore = defineStore('queue', {
       }
     },
 
+    async recallTicket(data: { ticketId: number }) {
+      try {
+        this.setLoading(true)
+        this.clearError('recallTicket')
+
+        const queueApi = useQueueApi()
+        const response = await queueApi.recallTicket(data)
+
+        if (response.ok && response.data) {
+          if (response.data.ticket) {
+            await this.updateTicketInStore(response.data.ticket)
+          }
+          return response.data
+        } else {
+          throw new Error(response.error || 'Failed to recall ticket')
+        }
+      } catch (error: any) {
+        this.setError('recallTicket', error.message)
+        throw error
+      } finally {
+        this.setLoading(false)
+      }
+    },
+
     async startServing(data: StartServingRequest) {
       try {
         this.setLoading(true)

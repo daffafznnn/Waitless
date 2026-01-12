@@ -74,9 +74,25 @@ export const issueTicket = async (req: Request, res: Response): Promise<void> =>
       return;
     }
 
-    res.status(400).json({
+    // Handle Sequelize validation errors with better messages
+    if (error.name === 'SequelizeValidationError' || error.name === 'SequelizeUniqueConstraintError') {
+      console.error('[QueueController] Sequelize error:', error.message, error.errors);
+      const message = error.errors?.[0]?.message || 'Terjadi kesalahan validasi data';
+      res.status(400).json({
+        ok: false,
+        error: message,
+      });
+      return;
+    }
+
+    // Log unexpected errors
+    if (!error.statusCode) {
+      console.error('[QueueController] Unexpected error issuing ticket:', error);
+    }
+
+    res.status(error.statusCode || 400).json({
       ok: false,
-      error: error.message || 'Failed to issue ticket',
+      error: error.message || 'Gagal mengambil nomor antrian',
     });
   }
 };
@@ -137,6 +153,50 @@ export const callNext = async (req: Request, res: Response): Promise<void> => {
     res.status(400).json({
       ok: false,
       error: error.message || 'Failed to call next ticket',
+    });
+  }
+};
+
+/**
+ * POST /api/queue/recall
+ * Re-call a ticket that's already in CALLING status
+ */
+export const recallTicket = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const actorId = (req as any).user?.userId;
+    if (!actorId) {
+      res.status(401).json({
+        ok: false,
+        error: 'Authentication required',
+      });
+      return;
+    }
+
+    const { ticketId } = req.body;
+
+    if (!ticketId || isNaN(parseInt(ticketId))) {
+      res.status(400).json({
+        ok: false,
+        error: 'Valid ticket ID is required',
+      });
+      return;
+    }
+
+    // Recall ticket
+    const result = await queueService.recall(parseInt(ticketId), actorId);
+
+    res.json({
+      ok: true,
+      data: {
+        ticket: result.ticket,
+        queueNumber: result.queueNumber,
+        message: result.message,
+      },
+    });
+  } catch (error: any) {
+    res.status(400).json({
+      ok: false,
+      error: error.message || 'Failed to recall ticket',
     });
   }
 };
